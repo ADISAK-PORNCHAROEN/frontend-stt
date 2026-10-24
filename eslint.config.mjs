@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Project-local agent skills and review artifacts are tooling, not app source.
+    ".agents/**",
+    ".impeccable/**",
+    ".playwright-mcp/**",
   ]),
 ]);
 

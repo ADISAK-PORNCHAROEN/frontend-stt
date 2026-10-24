@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ตัวอย่างทิศทาง — Time Atlas</title>
+<style>
+:root{color-scheme:light;--navy:#111c39;--chalk:#f4f0dd;--paper:#fbfaf5;--amber:#e6a84d;--blue:#89a8c8;--ink:#1c2944;--muted:#69748a;--line:#d8d7cd}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:900px;overflow:hidden}body{background:#e8e7df;color:var(--ink);font:15px/1.5 "Segoe UI",Tahoma,sans-serif}
+button{font:inherit;cursor:default}.app{width:100%;height:900px;background:var(--paper);display:flex;flex-direction:column;overflow:hidden}.top{height:56px;flex:none;background:var(--navy);color:var(--chalk);display:flex;align-items:center;justify-content:space-between;padding:0 34px}.top h1{font-size:16px;font-weight:600;margin:0;letter-spacing:.01em}.top-right{display:flex;gap:14px;align-items:center;font-size:12px;color:#d0d6df}.sample{border:1px solid #8a96ac;padding:4px 9px;color:var(--chalk);letter-spacing:.04em}
+.filebar{height:78px;flex:none;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 34px;background:#fffefb}.fileinfo{display:flex;align-items:center;gap:14px}.fileicon{height:38px;width:38px;border:1px solid var(--line);display:grid;place-items:center;color:var(--navy);font-size:12px}.filename{font-weight:600}.meta{color:var(--muted);font-size:12px;margin-top:2px}.done{color:#315c50;font-size:12px;display:flex;gap:8px;align-items:center}.done i{width:7px;height:7px;border-radius:50%;background:#4f8872;display:block}.actions{display:flex;gap:9px}.action{height:36px;background:transparent;border:1px solid #aeb4bc;padding:0 13px;color:var(--navy);font-size:13px}.action.primary{background:var(--navy);color:white;border-color:var(--navy)}
+.workspace{flex:1;min-height:0;display:grid;grid-template-columns:minmax(480px, .92fr) minmax(560px,1.08fr);gap:18px;padding:22px 34px 18px}.panel{border:1px solid var(--line);background:white;min-height:0;display:flex;flex-direction:column}.panel-head{height:54px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 18px;border-bottom:1px solid var(--line)}.panel-head h2{font-size:14px;font-weight:600;margin:0}.eyebrow{font-size:10px;letter-spacing:.12em;color:var(--muted)}
+.player-wrap{padding:18px;display:flex;flex-direction:column;min-height:0;gap:14px}.preview{height:330px;flex:none;background:linear-gradient(145deg,#253653 0%,#18243d 56%,#101a31 100%);position:relative;display:grid;place-items:center;color:#d8deea;overflow:hidden}.preview:before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent 0 39px,rgba(244,240,221,.055) 40px),repeating-linear-gradient(90deg,transparent 0 59px,rgba(244,240,221,.04) 60px)}.preview-caption{position:absolute;left:16px;top:13px;font-size:10px;letter-spacing:.1em;color:#c0cad8}.play{position:relative;width:54px;height:54px;border:1px solid #d7deeb;border-radius:50%;background:#111c39aa;color:white;font-size:19px;padding-left:4px}.preview-foot{position:absolute;bottom:13px;left:16px;right:16px;display:flex;justify-content:space-between;font-size:11px;color:#d4dbea}.controls{display:flex;align-items:center;gap:12px}.round{width:34px;height:34px;border:1px solid var(--line);border-radius:50%;background:white;color:var(--navy)}.time{font:12px/1.2 Consolas,monospace;white-space:nowrap;color:var(--ink)}.track{height:4px;background:#d9dde2;flex:1;position:relative}.track:before{content:"";position:absolute;left:0;top:0;bottom:0;width:35%;background:var(--navy)}.track:after{content:"";position:absolute;left:35%;top:-4px;width:12px;height:12px;border-radius:50%;background:var(--amber);border:2px solid white;box-shadow:0 0 0 1px var(--navy)}.hint{border-top:1px solid var(--line);padding-top:11px;color:var(--muted);font-size:12px}
+.transcript{min-height:0;display:flex;flex-direction:column}.transcript-title{display:flex;align-items:baseline;gap:9px}.count{font-size:11px;color:var(--muted);font-weight:400}.segments{padding:8px 14px 12px 10px;overflow:hidden;min-height:0;display:flex;flex-direction:column}.segment{display:grid;grid-template-columns:26px 68px 1fr;gap:10px;align-items:stretch;min-height:105px;border-bottom:1px solid #e9e7df;padding:11px 6px}.rail{position:relative;display:flex;justify-content:center}.rail:before{content:"";position:absolute;top:-12px;bottom:-12px;width:1px;background:#c9ced4}.segment:first-child .rail:before{top:13px}.segment:last-child .rail:before{bottom:50%}.dot{z-index:1;margin-top:8px;width:7px;height:7px;border-radius:50%;background:#9ba9ba;border:1px solid white;box-shadow:0 0 0 1px #9ba9ba}.segment.active .dot{width:11px;height:11px;background:var(--amber);box-shadow:0 0 0 2px var(--navy);margin-top:6px}.stamp{font:12px/1.4 Consolas,monospace;color:#596980;padding-top:3px}.words{font-size:16px;line-height:1.72;color:#26324a}.segment.active{background:#fbf7e9}.segment.active .stamp{color:#8c5b15;font-weight:700}.active-label{font-size:10px;letter-spacing:.07em;color:#8c5b15;text-transform:uppercase;margin-left:7px}
+.footer{height:36px;flex:none;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 34px;color:#737b88;font-size:11px;background:#fffefb}.footer strong{color:#424c5f;font-weight:500}
+@media(max-width:900px){html,body,.app{height:900px}.top,.filebar{padding-left:18px;padding-right:18px}.workspace{grid-template-columns:1fr;grid-template-rows:390px 1fr;padding:12px 18px;gap:12px}.preview{height:220px}.segment{min-height:74px}.words{font-size:14px}.footer{padding:0 18px}}
+</style>
+</head>
+<body>
+<main class="app" aria-label="พื้นที่ทำงานถอดเสียงตัวอย่าง">
+<header class="top"><h1>พื้นที่ทำงานถอดเสียง</h1><div class="top-right"><span>ถอดเสียงจากไฟล์ในเครื่อง</span><span class="sample">ตัวอย่างสถานะสำเร็จ · กำลังเล่น</span></div></header>
+<section class="filebar" aria-label="ไฟล์ที่เลือก">
+<div class="fileinfo"><div class="fileicon">MP4</div><div><div class="filename">สัมภาษณ์ชุมชน_ตัวอย่าง.mp4</div><div class="meta">วิดีโอพร้อมเสียง · 03:24 · 48.2 MB</div></div></div>
+<div class="fileinfo"><div class="done"><i></i>ถอดเสียงเสร็จแล้ว</div><div class="actions"><button class="action">ดาวน์โหลด TXT</button><button class="action primary">ดาวน์โหลด SRT</button></div></div>
+</section>
+<section class="workspace" aria-label="เครื่องเล่นและบทถอดเสียง">
+<article class="panel" aria-label="เครื่องเล่นสื่อ">
+<div class="panel-head"><h2>เล่นสื่อ</h2><span class="eyebrow">ไฟล์ต้นฉบับ · เฉพาะเซสชันนี้</span></div>
+<div class="player-wrap"><div class="preview"><span class="preview-caption">ตัวอย่างภาพจากคลิป</span><button class="play" aria-label="หยุดชั่วคราว">Ⅱ</button><div class="preview-foot"><span>สัมภาษณ์ชุมชน</span><span>วิดีโอ · เสียงต้นฉบับ</span></div></div>
+<div class="controls"><button class="round" aria-label="ย้อนกลับ 10 วินาที">↶</button><button class="round" aria-label="หยุดชั่วคราว">Ⅱ</button><span class="time">00:42.6</span><div class="track" aria-label="ตำแหน่ง 42 วินาที"></div><span class="time">03:24</span><button class="round" aria-label="เล่นซ้ำ">↻</button></div>
+<div class="hint">เลือกช่วงเวลาในบทถอดเสียงเพื่อข้ามไปยังตำแหน่งนั้น</div></div>
+</article>
+<article class="panel transcript" aria-label="บทถอดเสียง">
+<div class="panel-head"><div class="transcript-title"><h2>บทถอดเสียง</h2><span class="count">4 ช่วง · อ่านอย่างเดียว</span></div><span class="eyebrow">เวลาเริ่มต้น</span></div>
+<div class="segments">
+<div class="segment"><div class="rail"><span class="dot"></span></div><time class="stamp">00:18.2</time><div class="words">ตอนแรกเราคุยกันเรื่องการเดินทางของคนในชุมชน แล้วก็วิธีที่ทุกคนช่วยกันดูแลพื้นที่ส่วนกลาง</div></div>
+<div class="segment"><div class="rail"><span class="dot"></span></div><time class="stamp">00:31.0</time><div class="words">พอมีตลาดเล็ก ๆ เกิดขึ้น คนก็เริ่มแวะมาพบกันมากขึ้น ไม่ได้มาแค่ซื้อของอย่างเดียว</div></div>
+<div class="segment active"><div class="rail"><span class="dot"></span></div><time class="stamp">00:42.6</time><div class="words">สิ่งที่เราอยากเก็บไว้คือบรรยากาศแบบนี้ ทุกคนมีส่วนร่วมและค่อย ๆ ทำให้ชุมชนน่าอยู่ขึ้น <span class="active-label">กำลังเล่น</span></div></div>
+<div class="segment"><div class="rail"><span class="dot"></span></div><time class="stamp">00:56.4</time><div class="words">ต่อไปเราจะชวนคนรุ่นใหม่มาช่วยคิดกิจกรรม แล้วลองปรับให้เข้ากับสิ่งที่ชุมชนต้องการ</div></div>
+</div>
+</article>
+</section>
+<footer class="footer"><span>ผลลัพธ์นี้อยู่ในเซสชันปัจจุบันเท่านั้น</span><span>ภาษา UI <strong>ไทย</strong> · ภาษาเสียงตรวจจับอัตโนมัติ</span></footer>
+</main>
+</body>
+</html>

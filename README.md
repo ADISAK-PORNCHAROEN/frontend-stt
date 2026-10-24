@@ -1,36 +1,36 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Time Atlas
 
-## Getting Started
+เว็บถอดเสียงภาษาไทยแบบ local-first สำหรับไฟล์เสียงหรือวิดีโอในเครื่อง แสดง transcript ตามช่วงเวลาและให้กดเพื่อกลับไปฟังช่วงนั้นได้
 
-First, run the development server:
+## เริ่มใช้งาน
 
-```bash
+1. เปิด STT API และ worker ตามคำแนะนำใน README ของโปรเจกต์ `stt-services` โดย service ต้องพร้อมที่ `127.0.0.1:8000` ก่อนเริ่มงาน
+2. ในโฟลเดอร์โปรเจกต์นี้ รัน:
+
+   ```powershell
+   npm install
+   npm run dev
+   ```
+
+3. เปิด `http://localhost:3000` ใน browser บนเครื่องเดียวกัน
+
+Next.js ผูกกับ `127.0.0.1` ใน dev และ production scripts ตามขอบเขต local-only ของแอป ส่วน service URL ค่าเริ่มต้นคือ `http://127.0.0.1:8000`; ตั้ง `STT_SERVICE_URL` ได้เฉพาะ localhost/127.0.0.1 และห้ามตั้งเป็น host ภายนอก
+
+## ความสามารถและข้อจำกัด
+
+- รองรับ MP3, M4A, WAV, FLAC และ MP4 ที่มีเสียง; สูงสุด 1 GiB และ 2 ชั่วโมง
+- ติดตามครั้งละหนึ่งงานในแท็บปัจจุบัน ไม่มีบัญชี คลังประวัติ หรือการเก็บ transcript ใน browser
+- service เก็บไฟล์ต้นฉบับของงานสำเร็จ 24 ชั่วโมงและผล 7 วัน; งานล้มเหลวเก็บข้อมูล 24 ชั่วโมง
+- หากปิดแท็บระหว่างอัปโหลดหรือถอดเสียง หน้าเว็บจะไม่สามารถติดตามงานเดิมได้
+- ส่งออก transcript เป็น TXT หรือ SRT
+
+## Project commands
+
+```powershell
+npm run lint
+npm run build
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm start
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+โปรเจกต์ยังไม่มี unit, integration หรือ browser test runner ที่กำหนดไว้ใน `package.json`; lint และ build ไม่ใช่ behavioral test.

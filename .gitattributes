@@ -1,0 +1,2 @@
+# Preserve the original bytes of archived agent instructions.
+docs/history/agent-instructions/AGENTS.*.md -text
