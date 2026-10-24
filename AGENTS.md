@@ -1,10 +1,11 @@
 # frontend-stt Agent Guide
 
-This repository is a small Next.js App Router starter in TypeScript with Tailwind CSS. Its current page is the stock create-next-app screen; no product behavior or acceptance criteria have been confirmed.
+This repository is a Next.js App Router application in TypeScript with Tailwind CSS. It implements a Thai-language, local-first transcription workspace; accepted product behavior is documented in `docs/agents/current-task.md` and `docs/specs/`.
 
 ## Working agreements
 
 - Preserve the installed stack and file layout shown by package.json, package-lock.json, and the source. The app currently lives under src/app.
+- Use `develop` as the primary working and integration branch. Start project tasks and features from `develop`; use `main` only when the user explicitly requests it or for a release flow.
 - Do not infer product requirements from the repository name, parent folder, or starter template. Use accepted user requirements; record unresolved product decisions without inventing them.
 - For Next.js changes, first read the relevant installed guide under node_modules/next/dist/docs/ from this repository. Follow the version-matched docs and heed deprecations.
 - Keep shared instructions here. Keep product acceptance, design, architecture, testing, and security detail in their linked owner documents.
@@ -26,7 +27,7 @@ This repository is a small Next.js App Router starter in TypeScript with Tailwin
 
 | Task | Read first |
 | --- | --- |
-| Product behavior | docs/agents/current-task.md; no application feature acceptance is currently recorded |
+| Product behavior | docs/agents/current-task.md for the accepted application behavior |
 | UI work | DESIGN.md and project-local `.agents/skills/impeccable/SKILL.md` when the skills checklist marks it installed; if missing, report that local gap instead of relying on a global copy |
 | Architecture or Next.js changes | docs/ARCHITECTURE.md and the relevant installed-version guide under node_modules/next/dist/docs/ |
 | Tests or behavior changes | docs/TESTING.md and .agents/skills/test-engineering/SKILL.md |
