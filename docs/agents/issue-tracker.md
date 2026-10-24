@@ -1,5 +1,5 @@
 # Issue tracker
 
-This project uses local Markdown for specs and tickets. Canonical specs live in `docs/specs/`; tickets live one per file under `.scratch/<feature-slug>/issues/` in dependency order. New tickets use the `ready-for-agent` status from the project ticket workflow.
+GitHub Issues are the canonical tracker for project specs and tickets. Keep the reviewable Markdown copies in `docs/specs/` and `.scratch/<feature-slug>/issues/` aligned with the Issues. Specs live under `docs/specs/`; tickets live one per file under `.scratch/<feature-slug>/issues/` in dependency order. New actionable tickets use the `ready-for-agent` label.
 
-No external issue tracker is configured for this repository. Creating local ticket files does not create GitHub Issues, and this project does not use GitHub Actions.
+When publishing a spec and its tickets, create the spec issue first, then create tickets in dependency order and include GitHub issue references for the spec and blockers. This project does not use GitHub Actions.

@@ -2,7 +2,9 @@
 
 **What to build:** After a job succeeds, the owner can compare the read-only transcript with the original recording, seek by timestamp, follow playback, and download the result.
 
-**Blocked by:** 02: Submit one file and follow its transcription job.
+**GitHub Issue:** [#4](https://github.com/ADISAK-PORNCHAROEN/frontend-stt/issues/4) · **Spec:** [#1](https://github.com/ADISAK-PORNCHAROEN/frontend-stt/issues/1)
+
+**Blocked by:** [#3](https://github.com/ADISAK-PORNCHAROEN/frontend-stt/issues/3): Submit one file and follow its transcription job.
 
 **Status:** ready-for-agent
 

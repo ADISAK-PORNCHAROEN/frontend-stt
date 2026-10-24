@@ -74,6 +74,7 @@ The browser calls same-origin Next.js endpoints. Those endpoints proxy to the lo
 
 ## Further Notes
 
+- **GitHub spec issue:** [#1](https://github.com/ADISAK-PORNCHAROEN/frontend-stt/issues/1). Implementation tickets: [#2](https://github.com/ADISAK-PORNCHAROEN/frontend-stt/issues/2), [#3](https://github.com/ADISAK-PORNCHAROEN/frontend-stt/issues/3), and [#4](https://github.com/ADISAK-PORNCHAROEN/frontend-stt/issues/4).
 - This spec captures the approved V1 scope and Clear Timeline design. The current frontend already contains the primary UI and same-origin proxy flows; the agreed tickets are intended to verify those end-to-end behaviors and close any acceptance gaps, rather than duplicate existing work.
 - The local STT service returned HTTP 503 from the current preview during planning, so a live successful transcription, playback seek against a real result, and actual TXT/SRT downloads were not observed in this session.
-- The project owner confirmed separate API integration and browser journey seams, and approved the three-ticket dependency order. Tickets are stored as project-local Markdown files; no external tracker or GitHub Actions workflow is used.
+- The project owner confirmed separate API integration and browser journey seams, and approved the three-ticket dependency order. GitHub Issues are the canonical tracker; the project-local Markdown spec and ticket files are maintained as reviewable copies. GitHub Actions is not used.

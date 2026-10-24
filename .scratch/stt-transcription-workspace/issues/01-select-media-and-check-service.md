@@ -2,6 +2,8 @@
 
 **What to build:** The project owner can choose a supported local recording, review it in the Clear Timeline workspace, and see whether the local STT service can accept a job.
 
+**GitHub Issue:** [#2](https://github.com/ADISAK-PORNCHAROEN/frontend-stt/issues/2) · **Spec:** [#1](https://github.com/ADISAK-PORNCHAROEN/frontend-stt/issues/1)
+
 **Blocked by:** None (can start immediately).
 
 **Status:** ready-for-agent

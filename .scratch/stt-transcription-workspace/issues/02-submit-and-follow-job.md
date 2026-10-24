@@ -2,7 +2,9 @@
 
 **What to build:** The owner can submit the selected file once, follow upload and job progress, and recover clearly when the service or job fails.
 
-**Blocked by:** 01: Select a media file and check service readiness.
+**GitHub Issue:** [#3](https://github.com/ADISAK-PORNCHAROEN/frontend-stt/issues/3) · **Spec:** [#1](https://github.com/ADISAK-PORNCHAROEN/frontend-stt/issues/1)
+
+**Blocked by:** [#2](https://github.com/ADISAK-PORNCHAROEN/frontend-stt/issues/2): Select a media file and check service readiness.
 
 **Status:** ready-for-agent
 
