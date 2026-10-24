@@ -7,7 +7,8 @@ This is a local-first Next.js 16.4.2 App Router application. The root route is s
 | Concern | Source of truth | Role |
 | --- | --- | --- |
 | Root route and document | `src/app/page.tsx`, `src/app/layout.tsx` | Server-rendered entry point, Thai language metadata, global shell |
-| Transcription session | `src/features/transcription/components/transcription-workspace.tsx` | Current File, object URL, one job, upload progress, polling, playback time and view state |
+| Transcription session | `src/features/transcription/hooks/use-transcription-session.ts` | Current File, object URL, service readiness, one job, upload progress, polling, unload warning and lifecycle cleanup |
+| Workspace and playback | `src/features/transcription/components/transcription-workspace.tsx` | Page composition, player ref, playback time, seeking, and wiring session state into feature UI |
 | Media and transcript UI | `src/features/transcription/components/` | File selection, native audio/video controls, segment seek and active-segment follow |
 | Client API boundary | `src/features/transcription/api.ts` | Upload progress via XHR; parses unknown service responses into domain types |
 | Same-origin API | `src/app/api/stt/` | Health, streaming upload, status and result/download Route Handlers |
@@ -17,10 +18,10 @@ This is a local-first Next.js 16.4.2 App Router application. The root route is s
 
 ## Request and data flow
 
-1. The browser holds the selected `File` and an object URL in memory. Replacing the file or unmounting the workspace revokes the URL.
+1. `useTranscriptionSession` holds the selected `File` and its object URL in memory. Replacing the file or unmounting the feature releases the URL through one owner. Async session updates carry an identity so stale upload, polling, health, or duration work cannot overwrite a newer selection.
 2. The user explicitly starts the job. `XMLHttpRequest` sends `multipart/form-data` to `POST /api/stt/jobs` and reports upload progress.
 3. The Next.js Route Handler streams the request to the configured local service (`STT_SERVICE_URL`, default `http://127.0.0.1:8000`). It does not buffer the up-to-1-GiB body in application memory.
-4. The browser polls the same-origin status route while the page is open. On success it requests the JSON result, displays timestamped segments and uses the local object URL for playback.
+4. The feature hook polls the same-origin status route while the page is open. On success it requests the JSON result; the workspace displays timestamped segments and uses the local object URL for playback.
 5. TXT and SRT downloads are streamed through the result route. The browser does not save job history; the service applies its own temporary retention policy.
 
 The browser never selects the upstream URL. Only HTTP loopback URLs (`127.0.0.1` or `localhost`) are accepted by the server adapter. The service hostname, job ID, and export format are validated before building upstream paths.
@@ -35,13 +36,14 @@ The browser never selects the upstream URL. Only HTTP loopback URLs (`127.0.0.1`
 ## Boundaries and limitations
 
 - The STT service owns validation, job scheduling, transcript generation, and temporary retention. The app only tracks one job in the open page.
-- Leaving during upload or processing triggers the browser's before-unload prompt. This does not persist tracking state or cancel the service job.
+- Leaving during upload or processing triggers the hook's before-unload prompt. Unmount aborts browser upload tracking and clears polling timers; this does not cancel a job already accepted by the service or persist tracking state.
 - A service restart, closed tab, browser crash, or expired service result can prevent the page from recovering the job. The recovery path is to choose the source file and submit again.
 - The service's limit of ten queued jobs is enforced by the service; the UI translates a returned queue-full error.
 - User-provided files and service responses are untrusted inputs. Keep validation at the browser and server boundary; parse service JSON from `unknown`.
 
 ## Change guidance
 
+- Keep session lifecycle in the feature hook and playback coordination in the workspace/player. Keep generic UI primitives presentational; do not move STT types or behavior into `src/components/ui/`.
 - Keep UI state transitions inside the transcription feature. Add shared state or persistence only when an accepted requirement needs it.
 - Keep upstream paths fixed in the adapter. Do not accept a URL or arbitrary path from the browser.
 - Read the installed Next.js guide under `node_modules/next/dist/docs/` before changing Route Handler, cache, font, or page APIs.
