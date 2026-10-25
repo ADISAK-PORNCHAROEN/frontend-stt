@@ -11,14 +11,12 @@ type OriginalState =
   | { kind: "failed"; message: string };
 
 type SaveState = { kind: "idle" } | { kind: "saving" } | { kind: "saved" } | { kind: "failed"; message: string };
-
-function initialDraft(transcript: Transcript | null): Record<number, string> {
-  return transcript ? Object.fromEntries(transcript.segments.map(({ id, text }) => [id, text])) : {};
-}
+type ActiveEdit = { segmentId: number; text: string };
 
 export function useTranscriptReview(jobId: JobId | null, initialTranscript: Transcript | null) {
   const [savedTranscript, setSavedTranscript] = useState(initialTranscript);
-  const [draftTexts, setDraftTexts] = useState<Record<number, string>>(() => initialDraft(initialTranscript));
+  const [stagedTexts, setStagedTexts] = useState<Record<number, string>>({});
+  const [activeEdit, setActiveEdit] = useState<ActiveEdit | null>(null);
   const [originalState, setOriginalState] = useState<OriginalState>({ kind: "unloaded" });
   const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
   const [showingOriginal, setShowingOriginal] = useState(false);
@@ -31,25 +29,58 @@ export function useTranscriptReview(jobId: JobId | null, initialTranscript: Tran
     };
   }, []);
 
-  const isDirty = savedTranscript?.segments.some((segment) => draftTexts[segment.id] !== segment.text) ?? false;
   const isSaving = saveState.kind === "saving";
+  const hasStagedChanges = savedTranscript?.segments.some((segment) => stagedTexts[segment.id] !== undefined) ?? false;
+  const activeSavedText = activeEdit && savedTranscript?.segments.find((segment) => segment.id === activeEdit.segmentId)?.text;
+  const activeBaseText = activeEdit ? stagedTexts[activeEdit.segmentId] ?? activeSavedText : undefined;
+  const isDirty = hasStagedChanges || (activeEdit !== null && activeEdit.text !== activeBaseText);
   const latestDraft = useMemo<Transcript | null>(() => {
     if (!savedTranscript) return null;
     const segments = savedTranscript.segments.map((segment) => ({
       ...segment,
-      text: draftTexts[segment.id] ?? segment.text,
+      text: activeEdit?.segmentId === segment.id
+        ? activeEdit.text
+        : stagedTexts[segment.id] ?? segment.text,
     }));
     return { ...savedTranscript, segments, text: segments.map(({ text }) => text.trim()).join("\n") };
-  }, [draftTexts, savedTranscript]);
+  }, [activeEdit, savedTranscript, stagedTexts]);
   const transcript = showingOriginal && originalState.kind === "loaded"
     ? originalState.transcript
     : latestDraft;
 
-  const updateText = useCallback((segmentId: number, text: string) => {
-    if (!savedTranscript?.segments.some((segment) => segment.id === segmentId)) return;
-    setDraftTexts((current) => ({ ...current, [segmentId]: text }));
+  const beginEdit = useCallback((segmentId: number) => {
+    if (isSaving || showingOriginal || activeEdit !== null) return;
+    const segment = savedTranscript?.segments.find((item) => item.id === segmentId);
+    if (!segment) return;
+    setActiveEdit({ segmentId, text: stagedTexts[segmentId] ?? segment.text });
+  }, [activeEdit, isSaving, savedTranscript, showingOriginal, stagedTexts]);
+
+  const updateActiveText = useCallback((text: string) => {
+    if (!activeEdit || isSaving) return;
+    setActiveEdit((current) => current ? { ...current, text } : current);
     setSaveState({ kind: "idle" });
-  }, [savedTranscript]);
+  }, [activeEdit, isSaving]);
+
+  const stageActiveEdit = useCallback(() => {
+    if (!activeEdit || !savedTranscript || isSaving) return;
+    const savedText = savedTranscript.segments.find((segment) => segment.id === activeEdit.segmentId)?.text;
+    if (savedText === undefined) return;
+    setStagedTexts((current) => {
+      if (activeEdit.text === savedText) {
+        const next = { ...current };
+        delete next[activeEdit.segmentId];
+        return next;
+      }
+      return { ...current, [activeEdit.segmentId]: activeEdit.text };
+    });
+    setActiveEdit(null);
+    setSaveState({ kind: "idle" });
+  }, [activeEdit, isSaving, savedTranscript]);
+
+  const cancelActiveEdit = useCallback(() => {
+    if (!activeEdit || isSaving) return;
+    setActiveEdit(null);
+  }, [activeEdit, isSaving]);
 
   const viewOriginal = useCallback(async () => {
     if (!jobId || !savedTranscript) return;
@@ -74,9 +105,12 @@ export function useTranscriptReview(jobId: JobId | null, initialTranscript: Tran
   const viewLatest = useCallback(() => setShowingOriginal(false), []);
 
   const saveChanges = useCallback(async () => {
-    if (!jobId || !savedTranscript || !latestDraft || !isDirty || isSaving) return;
+    if (!jobId || !savedTranscript || !latestDraft || !hasStagedChanges || activeEdit || isSaving) return;
     const identity = requestIdentity.current;
-    const submittedSegments: Pick<TranscriptSegment, "id" | "text">[] = latestDraft.segments.map(({ id, text }) => ({ id, text }));
+    const submittedSegments: Pick<TranscriptSegment, "id" | "text">[] = savedTranscript.segments.map(({ id, text }) => ({
+      id,
+      text: stagedTexts[id] ?? text,
+    }));
     setSaveState({ kind: "saving" });
     try {
       await saveTranscript(jobId, submittedSegments);
@@ -87,13 +121,14 @@ export function useTranscriptReview(jobId: JobId | null, initialTranscript: Tran
         const segments = current.segments.map((segment) => ({ ...segment, text: textById.get(segment.id) ?? segment.text }));
         return { ...current, segments, text: segments.map(({ text }) => text.trim()).join("\n") };
       });
+      setStagedTexts({});
       setSaveState({ kind: "saved" });
     } catch {
       if (requestIdentity.current === identity) {
         setSaveState({ kind: "failed", message: "บันทึกการแก้ไขไม่สำเร็จ กรุณาลองอีกครั้ง" });
       }
     }
-  }, [isDirty, isSaving, jobId, latestDraft, savedTranscript]);
+  }, [activeEdit, hasStagedChanges, isSaving, jobId, latestDraft, savedTranscript, stagedTexts]);
 
   return {
     transcript,
@@ -102,7 +137,11 @@ export function useTranscriptReview(jobId: JobId | null, initialTranscript: Tran
     isSaving,
     saveState,
     originalState,
-    updateText,
+    activeEdit,
+    beginEdit,
+    updateActiveText,
+    stageActiveEdit,
+    cancelActiveEdit,
     viewOriginal,
     viewLatest,
     saveChanges,

@@ -62,7 +62,11 @@ function reviewState(overrides: Record<string, unknown> = {}) {
     isSaving: false,
     saveState: { kind: "idle" },
     originalState: { kind: "unloaded" },
-    updateText: vi.fn(),
+    activeEdit: null,
+    beginEdit: vi.fn(),
+    updateActiveText: vi.fn(),
+    stageActiveEdit: vi.fn(),
+    cancelActiveEdit: vi.fn(),
     viewOriginal: vi.fn(),
     viewLatest: vi.fn(),
     saveChanges: vi.fn(),
@@ -177,7 +181,7 @@ describe("TranscriptionWorkspace", () => {
     const audio = audioElement;
     Object.defineProperty(audio, "duration", { configurable: true, value: 4 });
     Object.defineProperty(audio, "currentTime", { configurable: true, writable: true, value: 0 });
-    fireEvent.click(screen.getByRole("button", { name: "เล่นช่วงเวลา 00:02.0" }));
+    fireEvent.click(screen.getByRole("button", { name: /เล่นช่วงเวลา 00:02.0/ }));
     expect(audio.currentTime).toBe(1.5);
     expect(audio.play).toHaveBeenCalledOnce();
 
@@ -185,7 +189,7 @@ describe("TranscriptionWorkspace", () => {
     fireEvent.seeking(audio);
     fireEvent.timeUpdate(audio);
     expect(screen.getAllByText("00:00.5")).toHaveLength(2);
-    fireEvent.click(screen.getByRole("button", { name: "เล่นช่วงเวลา 00:02.0" }));
+    fireEvent.click(screen.getByRole("button", { name: /เล่นช่วงเวลา 00:02.0/ }));
     audio.currentTime = 4.5;
     fireEvent.timeUpdate(audio);
     expect(audio.currentTime).toBe(4);

@@ -13,6 +13,12 @@ import { FileDrop } from "./file-drop";
 import { MediaPlayer } from "./media-player";
 import { TranscriptPanel } from "./transcript-panel";
 
+const HOME_STEPS = [
+  { marker: "A", title: "เลือกไฟล์", description: "เสียงหรือวิดีโอ" },
+  { marker: "B", title: "เริ่มถอดเสียง", description: "ติดตามสถานะที่นี่" },
+  { marker: "C", title: "ฟังตามช่วง", description: "กดเวลาเพื่อเล่นซ้ำ" },
+] as const;
+
 function ServiceNotice({ serviceState, onRetry, showChecking = true }: { serviceState: ServiceState; onRetry: () => void; showChecking?: boolean }) {
   if (serviceState === "ready" || (serviceState === "checking" && !showChecking)) return null;
 
@@ -109,9 +115,13 @@ function SucceededWorkspace({
           isSaving={review.isSaving}
           saveState={review.saveState}
           originalState={review.originalState}
+          activeEdit={review.activeEdit}
           downloadActions={<DownloadActions jobId={session.jobId} disabled={review.isDirty || review.isSaving} />}
           onReplay={onReplay}
-          onEdit={review.updateText}
+          onBeginEdit={review.beginEdit}
+          onEdit={review.updateActiveText}
+          onStageEdit={review.stageActiveEdit}
+          onCancelEdit={review.cancelActiveEdit}
           onViewOriginal={() => void review.viewOriginal()}
           onViewLatest={review.viewLatest}
           onSave={() => void review.saveChanges()}
@@ -270,7 +280,7 @@ export function TranscriptionWorkspace() {
       </header>
 
       {isHome ? (
-        <div className="workspace-content flex flex-1 flex-col gap-4 py-5 desktop-fit:min-h-0 desktop-fit:gap-5 desktop-fit:py-4">
+        <div className="workspace-content flex flex-1 flex-col gap-5 py-5 desktop-fit:min-h-0 desktop-fit:justify-center desktop-fit:gap-8 desktop-fit:py-6">
           <section className="page-intro grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:items-center desktop-fit:gap-8" aria-labelledby="page-title">
             <div className="intro-copy">
               <h1 id="page-title" className="m-0 max-w-[620px] text-[clamp(2rem,3.5vw,3rem)] font-semibold leading-[1.16] tracking-[-0.025em] text-ink">ฟังทุกช่วงเวลา<br /><span className="text-accent">อ่านทุกถ้อยคำ</span></h1>
@@ -282,18 +292,25 @@ export function TranscriptionWorkspace() {
             </div>
           </section>
 
-          <section className="home-details grid gap-4 rounded-2xl bg-white p-4 shadow-[0_8px_26px_rgb(32_60_90_/_7%)] sm:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] sm:p-5" aria-label="วิธีใช้งานและการจัดเก็บ">
+          <section className="home-details grid gap-5 rounded-2xl bg-white p-5 shadow-[0_8px_26px_rgb(32_60_90_/_7%)] sm:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] sm:gap-6 sm:p-6" aria-label="วิธีใช้งานและการจัดเก็บ">
             <div className="home-process min-w-0">
-              <h2 className="m-0 border-b border-line pb-3 text-sm font-semibold text-ink">แผนที่การฟัง</h2>
-              <ol className="home-steps m-0 grid list-none gap-3 pt-3 sm:grid-cols-3 sm:gap-2">
-                <li className="flex items-center gap-2.5"><span className="grid size-7 shrink-0 place-items-center rounded-full border border-coordinate-soft font-mono text-xs text-accent">A</span><p className="m-0 flex flex-col"><strong className="text-xs font-semibold text-ink">เลือกไฟล์</strong><small className="text-[11px] text-ink-muted">เสียงหรือวิดีโอ</small></p></li>
-                <li className="flex items-center gap-2.5"><span className="grid size-7 shrink-0 place-items-center rounded-full border border-coordinate-soft font-mono text-xs text-accent">B</span><p className="m-0 flex flex-col"><strong className="text-xs font-semibold text-ink">เริ่มถอดเสียง</strong><small className="text-[11px] text-ink-muted">ติดตามสถานะที่นี่</small></p></li>
-                <li className="flex items-center gap-2.5"><span className="grid size-7 shrink-0 place-items-center rounded-full border border-coordinate-soft font-mono text-xs text-accent">C</span><p className="m-0 flex flex-col"><strong className="text-xs font-semibold text-ink">ฟังตามช่วง</strong><small className="text-[11px] text-ink-muted">กดเวลาเพื่อเล่นซ้ำ</small></p></li>
+              <h2 className="m-0 border-b border-line pb-3 text-base font-semibold text-ink">แผนที่การฟัง</h2>
+              <ol className="home-steps relative m-0 grid list-none gap-4 pt-4 sm:grid-cols-3 sm:gap-3">
+                {HOME_STEPS.map(({ marker, title, description }) => (
+                  <li key={marker} className="relative flex min-w-0 items-start gap-3 after:absolute after:bottom-[-16px] after:left-4 after:top-8 after:w-px after:bg-line after:content-[''] sm:flex-col sm:gap-2.5 sm:after:bottom-auto sm:after:left-8 sm:after:right-[-12px] sm:after:top-4 sm:after:h-px sm:after:w-auto last:after:hidden">
+                    <span className="relative z-10 grid size-8 shrink-0 place-items-center rounded-full border border-coordinate-soft bg-white font-mono text-xs text-accent">{marker}</span>
+                    <p className="m-0 flex flex-col"><strong className="text-sm font-semibold text-ink">{title}</strong><small className="text-xs leading-relaxed text-ink-muted">{description}</small></p>
+                  </li>
+                ))}
               </ol>
             </div>
-            <aside className="home-retention border-t border-line pt-3 sm:border-l sm:border-t-0 sm:pl-5 sm:pt-0" aria-labelledby="retention-title">
-              <h2 id="retention-title" className="m-0 text-xs font-semibold text-accent">การจัดเก็บชั่วคราว</h2>
-              <p className="m-0 mt-1 text-xs leading-relaxed text-ink-muted">เมื่อสำเร็จ service ลบไฟล์ต้นฉบับหลัง 24 ชั่วโมง และเก็บผลถอดเสียงไว้ 7 วัน หากงานล้มเหลวจะลบข้อมูลหลัง 24 ชั่วโมง เว็บนี้ไม่บันทึกประวัติถาวร และหากปิดแท็บระหว่างถอดเสียงจะกลับมาติดตามงานเดิมไม่ได้</p>
+            <aside className="home-retention border-t border-line pt-4 sm:border-l sm:border-t-0 sm:pl-6 sm:pt-0" aria-labelledby="retention-title">
+              <h2 id="retention-title" className="m-0 text-sm font-semibold text-ink">การจัดเก็บชั่วคราว</h2>
+              <dl className="m-0 mt-3 grid grid-cols-2 gap-x-4 gap-y-3">
+                <div><dt className="text-xs text-ink-muted">ไฟล์ต้นฉบับ</dt><dd className="m-0 mt-0.5 text-sm font-semibold text-ink">24 ชั่วโมง</dd></div>
+                <div><dt className="text-xs text-ink-muted">ผลถอดเสียงเมื่อสำเร็จ</dt><dd className="m-0 mt-0.5 text-sm font-semibold text-ink">7 วัน</dd></div>
+              </dl>
+              <p className="m-0 mt-3 text-xs leading-relaxed text-ink-muted">งานล้มเหลวจะลบข้อมูลภายใน 24 ชั่วโมง เว็บไม่เก็บประวัติถาวร และปิดแท็บระหว่างถอดเสียงแล้วกลับมาติดตามงานเดิมไม่ได้</p>
             </aside>
           </section>
         </div>
