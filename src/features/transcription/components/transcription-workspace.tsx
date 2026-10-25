@@ -280,8 +280,8 @@ export function TranscriptionWorkspace() {
       </header>
 
       {isHome ? (
-        <div className="workspace-content flex flex-1 flex-col gap-5 py-5 desktop-fit:min-h-0 desktop-fit:justify-center desktop-fit:gap-8 desktop-fit:py-6">
-          <section className="page-intro grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:items-center desktop-fit:gap-8" aria-labelledby="page-title">
+        <div className="workspace-content flex flex-1 flex-col gap-5 py-5 desktop-fit:min-h-0 desktop-fit:justify-start desktop-fit:gap-4 desktop-fit:py-3">
+          <section className="page-intro grid gap-5 desktop-fit:gap-4" aria-labelledby="page-title">
             <div className="intro-copy">
               <h1 id="page-title" className="m-0 max-w-[620px] text-[clamp(2rem,3.5vw,3rem)] font-semibold leading-[1.16] tracking-[-0.025em] text-ink">ฟังทุกช่วงเวลา<br /><span className="text-accent">อ่านทุกถ้อยคำ</span></h1>
               <p className="m-0 mt-3 max-w-[60ch] text-sm leading-relaxed text-ink-muted sm:text-base">ถอดเสียงจากคลิปเสียงหรือวิดีโอ แล้วกลับไปฟังแต่ละช่วงได้ทันที</p>

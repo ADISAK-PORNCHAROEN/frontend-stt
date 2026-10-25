@@ -11,18 +11,25 @@ async function expectViewportContract(page: import("@playwright/test").Page, vie
   const geometry = await page.evaluate(() => {
     const header = document.querySelector(".topbar");
     const footer = document.querySelector(".page-footer");
+    const intro = document.querySelector(".page-intro");
     return {
       documentWidth: document.documentElement.scrollWidth,
       documentHeight: document.documentElement.scrollHeight,
       viewportWidth: window.innerWidth,
       viewportHeight: window.innerHeight,
       headerTop: header?.getBoundingClientRect().top ?? -1,
+      headerBottom: header?.getBoundingClientRect().bottom ?? -1,
+      introTop: intro?.getBoundingClientRect().top ?? null,
       footerBottom: footer?.getBoundingClientRect().bottom ?? -1,
       headerPosition: header ? getComputedStyle(header).position : "missing",
       footerPosition: footer ? getComputedStyle(footer).position : "missing",
     };
   });
   expect(geometry.documentWidth).toBeLessThanOrEqual(geometry.viewportWidth + 1);
+  if (geometry.introTop !== null) {
+    expect(geometry.introTop).toBeGreaterThanOrEqual(geometry.headerBottom);
+    expect(geometry.introTop - geometry.headerBottom).toBeLessThanOrEqual(viewport.name === "mobile" ? 24 : 36);
+  }
 
   if (viewport.name === "mobile") {
     expect(geometry.headerPosition).toBe("static");
