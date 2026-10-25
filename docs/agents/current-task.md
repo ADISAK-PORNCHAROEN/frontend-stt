@@ -26,3 +26,7 @@ The user approved the design brief and authorized implementation. Keep architect
 - Verification used the controllable local STT fixture and Playwright, not the real STT service.
 - Commands passed: `npm run test -- --reporter=list` (19 tests), `npm run lint`, and `npm run build`.
 - Desktop and mobile screenshots were visually reviewed for the model-selection and unsaved-review states.
+
+## Active on 2026-10-26 — frontend-stt #12–#15
+
+Implement the open parent spec #12 through dependent issues #13 → #14 → #15. GitHub issue bodies are the acceptance source. #13 is the current milestone; #14 and #15 remain blocked by their issue dependencies. Use the controllable local fixture and synthetic media. Do not claim real-service transcription testing. Keep Impeccable, Foundation, project skills/settings, and existing unrelated changes intact.

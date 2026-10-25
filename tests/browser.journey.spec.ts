@@ -196,8 +196,9 @@ test("#3 gives Thai recovery for service, queue, invalid-media, expired-job, and
   const choose = async () => page.locator('input[type="file"]').setInputFiles(silentWav({ durationSeconds: 1 }));
   const clear = async () => page.getByRole("button", { name: "เลือกไฟล์ใหม่" }).click();
 
-  stt.reset({ kind: "unavailable" });
   await choose();
+  await expect(page.getByRole("button", { name: "เริ่มถอดเสียง" })).toBeEnabled();
+  stt.reset({ kind: "unavailable" });
   await page.getByRole("button", { name: "เริ่มถอดเสียง" }).click();
   await expect(page.locator(".error-panel")).toContainText("เชื่อมต่อ STT service ไม่ได้");
   await clear();

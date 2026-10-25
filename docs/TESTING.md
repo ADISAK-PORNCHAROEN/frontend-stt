@@ -8,11 +8,18 @@ The repository has a Playwright API integration and browser journey harness for 
 | --- | --- | --- | --- |
 | npm run lint | package.json, using ESLint 9 and eslint-config-next | ESLint configuration and source linting | Not a behavioral test, type check, or security review |
 | npm run build | package.json, using next build | Production compilation/build for the installed Next.js version | Does not establish user-facing behavior by itself |
-| npm run test | package.json and `playwright.config.ts` | Same-origin API integration against a controlled loopback STT fixture and browser journeys in Microsoft Edge | Builds an isolated test app in `.next-stt-test`; fixtures prove the frontend contract, not live STT quality or availability |
+| npm run test:unit | package.json and `vitest.config.ts` | Vitest and Testing Library unit/component tests in jsdom | No browser layout or actual Next.js route boundary |
+| npm run test:coverage | package.json and `vitest.config.ts` | V8 coverage over executable files under `src/features/transcription` | Enforces per-file thresholds: 90% lines/functions and 80% branches; no live STT behavior |
+| npm run test:api | package.json and `playwright.config.ts` | Same-origin API integration against the controlled loopback STT fixture in Microsoft Edge | Builds the isolated test app in `.next-stt-test`; fixtures prove the frontend contract, not live STT quality or availability |
+| npm run test:e2e | package.json and `playwright.config.ts` | Browser journeys and four-state screenshots in Microsoft Edge at desktop and mobile sizes | The screenshot evidence uses synthetic media and is not live STT verification |
+| npm run test:all | package.json | Runs unit, API integration, browser journeys, and V8 coverage in sequence | API and browser layers also retain dedicated commands |
+| npm run test | package.json and `playwright.config.ts` | All Playwright API and browser specs in Microsoft Edge | Builds the isolated test app in `.next-stt-test`; report output is local and ignored |
 | npm run dev | package.json, using next dev | Local development server | Interactive runtime, not an automated test suite |
 | npm start | package.json, using next start | Serves a prior production build | Requires a build first |
 
-There is no configured typecheck or coverage script and no mandatory coverage threshold. The Playwright worker starts an in-process service fixture on an ephemeral loopback port, builds the real app into its isolated output directory, then starts a loopback production server. API tests send real HTTP requests through the Next.js routes; browser tests run in the installed Microsoft Edge channel. The fixture supplies deterministic model readiness/defaults, upload values, job states, save failures, original/latest transcript results, and exports. No test calls the real STT service.
+`npx tsc --noEmit` is the local typecheck command. The Playwright configuration writes its HTML report to ignored `playwright-report/`; the four-state visual tests attach passing screenshots for start, processing, completed, and editing at 1440×1000 and 390×844. Coverage output stays in ignored `coverage/`.
+
+The Playwright worker starts an in-process service fixture on an ephemeral loopback port, builds the real app into its isolated output directory, then starts a loopback production server. API tests send real HTTP requests through the Next.js routes; browser tests run in the installed Microsoft Edge channel. The fixture supplies deterministic model readiness/defaults, upload values, job states, save failures, original/latest transcript results, and exports. No test calls the real STT service.
 
 ## Selecting evidence
 
