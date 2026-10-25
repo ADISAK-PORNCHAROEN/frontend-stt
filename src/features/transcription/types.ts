@@ -2,8 +2,11 @@ declare const jobIdBrand: unique symbol;
 
 export type JobId = string & { readonly [jobIdBrand]: true };
 
+export type WhisperModel = "turbo" | "large-v3";
+
 export type ServiceHealth = {
   ready: boolean;
+  defaultModel: WhisperModel | null;
 };
 
 export type TranscriptSegment = {

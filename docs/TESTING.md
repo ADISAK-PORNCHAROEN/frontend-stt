@@ -2,20 +2,21 @@
 
 ## Current capabilities
 
-The repository has no configured unit, integration, browser E2E, or coverage test runner. No CI workflow was found. package.json defines only these scripts:
+The repository has a Playwright API integration and browser journey harness for the local transcription workflow. No CI workflow is configured. package.json defines these relevant checks:
 
 | Command | Owner | What it checks | Limits |
 | --- | --- | --- | --- |
 | npm run lint | package.json, using ESLint 9 and eslint-config-next | ESLint configuration and source linting | Not a behavioral test, type check, or security review |
 | npm run build | package.json, using next build | Production compilation/build for the installed Next.js version | Does not establish user-facing behavior by itself |
+| npm run test | package.json and `playwright.config.ts` | Same-origin API integration against a controlled loopback STT fixture and browser journeys in Microsoft Edge | Builds an isolated test app in `.next-stt-test`; fixtures prove the frontend contract, not live STT quality or availability |
 | npm run dev | package.json, using next dev | Local development server | Interactive runtime, not an automated test suite |
 | npm start | package.json, using next start | Serves a prior production build | Requires a build first |
 
-There is no test, typecheck, coverage, or E2E script in package.json. The repository does not define a mandatory test baseline or coverage threshold. Do not invent one or report an unconfigured check as passed.
+There is no configured typecheck or coverage script and no mandatory coverage threshold. The Playwright worker starts an in-process service fixture on an ephemeral loopback port, builds the real app into its isolated output directory, then starts a loopback production server. API tests send real HTTP requests through the Next.js routes; browser tests run in the installed Microsoft Edge channel. The fixture supplies deterministic model readiness/defaults, upload values, job states, save failures, original/latest transcript results, and exports. No test calls the real STT service.
 
 ## Selecting evidence
 
-1. Define the expected behavior from `PRODUCT.md` and `docs/agents/current-task.md` before choosing assertions. The first accepted feature is a local-first transcription workspace with upload, status polling, playback seek, transcript display, and TXT/SRT export.
+1. Define the expected behavior from `PRODUCT.md` and `docs/agents/current-task.md` before choosing assertions. The workspace covers upload, model selection, status polling, bounded segment replay, transcript review/save/original view, and JSON/TXT/SRT export.
 2. For pure transformations or state transitions, use unit tests when such logic exists. For interacting route/server/data boundaries, use integration tests. For critical browser journeys, use E2E tests. A missing runner is a gap to report, not a reason to claim that another layer proves the behavior.
 3. For UI changes, review semantic markup, keyboard behavior, responsive states, and runtime appearance against `DESIGN.md` and the route's Impeccable surface brief. Use a browser check when the task warrants it; record what was actually observed. A visual inspection does not prove the upload, job, or export flow.
 4. Run existing npm scripts only when the task or an established project rule requires them. Select lint/build based on changed surface and report each exact command. These documents do not make either command a new unconditional CI gate.
@@ -23,7 +24,7 @@ There is no test, typecheck, coverage, or E2E script in package.json. The reposi
 
 ## Evidence and ownership
 
-- Use .agents/skills/test-engineering/SKILL.md for test design, layer selection, test edits, and reporting.
+- Use `.agents/skills/test-engineering/SKILL.md` for test design, layer selection, test edits, and reporting.
 - Use .agents/skills/security-review/SKILL.md for any code/executable diff; behavioral tests do not replace security review.
-- Record command output in the task report or normal review artifact. Keep AI review conclusions separate from lint/build output.
+- Record command output in the task report or normal review artifact. Keep AI review conclusions separate from lint/build/test output.
 - Revisit this guide when test, coverage, E2E, CI, or build configuration is added or changed.

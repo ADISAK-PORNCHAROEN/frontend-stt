@@ -1,4 +1,4 @@
-import { isJobId, type JobId, type RemoteJob, type ServiceHealth, type Transcript } from "./types";
+import { isJobId, type JobId, type RemoteJob, type ServiceHealth, type Transcript, type TranscriptSegment, type WhisperModel } from "./types";
 
 const ERROR_MESSAGES: Record<string, string> = {
   file_too_large: "ไฟล์มีขนาดเกิน 1 GiB กรุณาเลือกไฟล์ที่เล็กกว่านี้",
@@ -10,23 +10,35 @@ const ERROR_MESSAGES: Record<string, string> = {
   result_unavailable: "ผลลัพธ์ยังไม่พร้อม กรุณารอสักครู่แล้วลองอีกครั้ง",
   not_found: "ไม่พบงานนี้หรือข้อมูลหมดอายุแล้ว กรุณาส่งไฟล์ใหม่",
   internal_error: "เกิดข้อผิดพลาดระหว่างถอดเสียง กรุณาส่งไฟล์ใหม่",
+  model_load_failed: "โมเดลที่เลือกโหลดไม่สำเร็จ กรุณาเลือกอีกโมเดลแล้วลองส่งไฟล์นี้อีกครั้ง",
 };
+
+export class ApiError extends Error {
+  constructor(readonly code: string, message: string) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function readErrorMessage(payload: unknown, fallback: string): string {
-  if (!isRecord(payload)) return fallback;
+function readApiError(payload: unknown, fallback: string): ApiError {
+  if (!isRecord(payload)) return new ApiError("unknown", fallback);
   const error = payload.error;
   if (isRecord(error) && typeof error.code === "string") {
-    return ERROR_MESSAGES[error.code] ?? fallback;
+    return new ApiError(error.code, ERROR_MESSAGES[error.code] ?? fallback);
   }
-  return fallback;
+  return new ApiError("unknown", fallback);
 }
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
+}
+
+function isWhisperModel(value: unknown): value is WhisperModel {
+  return value === "turbo" || value === "large-v3";
 }
 
 function parseJobId(payload: unknown): JobId {
@@ -36,6 +48,7 @@ function parseJobId(payload: unknown): JobId {
 
 export function submitFile(
   file: File,
+  model: WhisperModel,
   onProgress: (percent: number) => void,
   signal: AbortSignal,
 ): Promise<JobId> {
@@ -43,6 +56,7 @@ export function submitFile(
     const xhr = new XMLHttpRequest();
     const body = new FormData();
     body.append("file", file, file.name);
+    body.append("model", model);
     xhr.open("POST", "/api/stt/jobs");
     xhr.responseType = "json";
 
@@ -55,7 +69,7 @@ export function submitFile(
     xhr.addEventListener("load", () => {
       const payload: unknown = xhr.response;
       if (xhr.status < 200 || xhr.status >= 300) {
-        reject(new Error(readErrorMessage(payload, "ส่งไฟล์ไม่สำเร็จ กรุณาลองใหม่")));
+        reject(readApiError(payload, "ส่งไฟล์ไม่สำเร็จ กรุณาลองใหม่"));
         return;
       }
       try {
@@ -72,8 +86,8 @@ export function submitFile(
   });
 }
 
-async function readJson(path: string): Promise<unknown> {
-  const response = await fetch(path, { cache: "no-store" });
+async function readJson(path: string, init: RequestInit = {}): Promise<unknown> {
+  const response = await fetch(path, { ...init, cache: "no-store" });
   let payload: unknown;
   try {
     payload = await response.json();
@@ -82,7 +96,7 @@ async function readJson(path: string): Promise<unknown> {
   }
 
   if (!response.ok) {
-    throw new Error(readErrorMessage(payload, "เชื่อมต่อ STT service ไม่ได้"));
+    throw readApiError(payload, "เชื่อมต่อ STT service ไม่ได้");
   }
   return payload;
 }
@@ -95,7 +109,8 @@ export async function getServiceHealth(): Promise<ServiceHealth> {
   } catch {
     payload = null;
   }
-  return { ready: response.ok && isRecord(payload) && payload.ready === true };
+  const defaultModel = isRecord(payload) && isWhisperModel(payload.default_model) ? payload.default_model : null;
+  return { ready: response.ok && isRecord(payload) && payload.ready === true && defaultModel !== null, defaultModel };
 }
 
 export async function getRemoteJob(jobId: JobId): Promise<RemoteJob> {
@@ -132,9 +147,13 @@ function parseTranscript(payload: unknown): Transcript {
     throw new Error("รูปแบบ transcript จาก STT service ไม่ถูกต้อง");
   }
 
-  const segments = payload.segments.map((item, index) => {
+  const segmentIds = new Set<number>();
+  const segments = payload.segments.map((item) => {
     if (
       !isRecord(item) ||
+      typeof item.id !== "number" ||
+      !Number.isSafeInteger(item.id) ||
+      item.id < 1 ||
       !isFiniteNumber(item.start) ||
       !isFiniteNumber(item.end) ||
       typeof item.text !== "string" ||
@@ -143,14 +162,35 @@ function parseTranscript(payload: unknown): Transcript {
     ) {
       throw new Error("มีช่วงเวลาใน transcript ที่ไม่ถูกต้อง");
     }
-    return { id: index, start: item.start, end: item.end, text: item.text };
+    const id = item.id;
+    if (segmentIds.has(id)) throw new Error("มีรหัสช่วงใน transcript ซ้ำกัน");
+    segmentIds.add(id);
+    return { id, start: item.start, end: item.end, text: item.text };
   });
 
   const text = typeof payload.text === "string" ? payload.text : segments.map((segment) => segment.text).join("\n");
   return { durationSeconds: payload.duration_seconds, segments, text };
 }
 
-export async function getTranscript(jobId: JobId): Promise<Transcript> {
-  const payload = await readJson(`/api/stt/jobs/${jobId}/result?format=json`);
+export async function getTranscript(jobId: JobId, format: "json" | "original-json" = "json"): Promise<Transcript> {
+  const payload = await readJson(`/api/stt/jobs/${jobId}/result?format=${format}`);
   return parseTranscript(payload);
+}
+
+export function getOriginalTranscript(jobId: JobId): Promise<Transcript> {
+  return getTranscript(jobId, "original-json");
+}
+
+export async function saveTranscript(
+  jobId: JobId,
+  segments: readonly Pick<TranscriptSegment, "id" | "text">[],
+): Promise<void> {
+  const payload = await readJson(`/api/stt/jobs/${jobId}/transcript`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ segments }),
+  });
+  if (!isRecord(payload) || payload.status !== "saved") {
+    throw new Error("บันทึกการแก้ไขไม่สำเร็จ กรุณาลองอีกครั้ง");
+  }
 }

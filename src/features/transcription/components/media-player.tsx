@@ -9,10 +9,11 @@ type Props = {
   playerRef: RefObject<HTMLMediaElement | null>;
   currentTime: number;
   onTimeChange: (seconds: number) => void;
+  onSeeking: () => void;
   onDuration: (seconds: number) => void;
 };
 
-export function MediaPlayer({ media, playerRef, currentTime, onTimeChange, onDuration }: Props) {
+export function MediaPlayer({ media, playerRef, currentTime, onTimeChange, onSeeking, onDuration }: Props) {
   const [previewError, setPreviewError] = useState(false);
   const isVideo = media.file.name.toLowerCase().endsWith(".mp4");
 
@@ -40,6 +41,7 @@ export function MediaPlayer({ media, playerRef, currentTime, onTimeChange, onDur
             src={media.url}
             controls
             preload="metadata"
+            onSeeking={onSeeking}
             onTimeUpdate={handleTimeUpdate}
             onLoadedMetadata={handleMetadata}
             onError={() => setPreviewError(true)}
@@ -62,6 +64,7 @@ export function MediaPlayer({ media, playerRef, currentTime, onTimeChange, onDur
               src={media.url}
               controls
               preload="metadata"
+              onSeeking={onSeeking}
               onTimeUpdate={handleTimeUpdate}
               onLoadedMetadata={handleMetadata}
               onError={() => setPreviewError(true)}

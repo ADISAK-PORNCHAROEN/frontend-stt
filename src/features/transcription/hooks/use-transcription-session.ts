@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getRemoteJob, getServiceHealth, getTranscript, submitFile } from "../api";
+import { ApiError, getRemoteJob, getServiceHealth, getTranscript, submitFile } from "../api";
 import { MAX_FILE_DURATION_SECONDS, MAX_FILE_BYTES } from "../constants";
-import type { JobId, MediaFile, ServiceState, WorkspaceSession } from "../types";
+import type { JobId, MediaFile, ServiceState, WhisperModel, WorkspaceSession } from "../types";
 
 function getJobId(session: WorkspaceSession): JobId | null {
   return session.kind === "queued" || session.kind === "running" || session.kind === "succeeded" || session.kind === "failed"
@@ -14,6 +14,9 @@ function getJobId(session: WorkspaceSession): JobId | null {
 export function useTranscriptionSession() {
   const [session, setSession] = useState<WorkspaceSession>({ kind: "empty" });
   const [serviceState, setServiceState] = useState<ServiceState>("checking");
+  const [serviceDefaultModel, setServiceDefaultModel] = useState<WhisperModel | null>(null);
+  const [modelSelection, setModelSelection] = useState<{ model: WhisperModel | null; source: "service" | "user" }>({ model: null, source: "service" });
+  const selectedModel = modelSelection.model;
   const [selectionError, setSelectionError] = useState<string | null>(null);
   const [jobMessage, setJobMessage] = useState<string | null>(null);
   const sessionIdentity = useRef(0);
@@ -31,6 +34,17 @@ export function useTranscriptionSession() {
     const url = ownedObjectUrl.current;
     ownedObjectUrl.current = null;
     if (url) URL.revokeObjectURL(url);
+  }, []);
+
+  const applyHealth = useCallback((health: Awaited<ReturnType<typeof getServiceHealth>>) => {
+    setServiceState(health.ready ? "ready" : "unavailable");
+    if (health.defaultModel) {
+      setServiceDefaultModel(health.defaultModel);
+      setModelSelection((current) => current.source === "user"
+        ? current
+        : { model: health.defaultModel, source: "service" });
+    }
+    if (health.ready) setJobMessage(null);
   }, []);
 
   useEffect(() => {
@@ -51,18 +65,17 @@ export function useTranscriptionSession() {
     try {
       const health = await getServiceHealth();
       if (!mounted.current || identity !== healthRequestIdentity.current) return;
-      setServiceState(health.ready ? "ready" : "unavailable");
-      if (health.ready) setJobMessage(null);
+      applyHealth(health);
     } catch {
       if (mounted.current && identity === healthRequestIdentity.current) setServiceState("unavailable");
     }
-  }, []);
+  }, [applyHealth]);
 
   useEffect(() => {
     const identity = ++healthRequestIdentity.current;
     void getServiceHealth().then((health) => {
       if (mounted.current && identity === healthRequestIdentity.current) {
-        setServiceState(health.ready ? "ready" : "unavailable");
+        applyHealth(health);
       }
     }).catch(() => {
       if (mounted.current && identity === healthRequestIdentity.current) setServiceState("unavailable");
@@ -70,7 +83,7 @@ export function useTranscriptionSession() {
     return () => {
       if (healthRequestIdentity.current === identity) healthRequestIdentity.current += 1;
     };
-  }, []);
+  }, [applyHealth]);
 
   useEffect(() => {
     if (session.kind !== "submitting" && session.kind !== "queued" && session.kind !== "running") return;
@@ -122,6 +135,13 @@ export function useTranscriptionSession() {
         timer = setTimeout(() => void poll(), 1100);
       } catch (error) {
         if (canUpdate()) {
+          if (error instanceof ApiError && error.code === "not_found") {
+            setJobMessage(null);
+            setSession((current) => current.kind === "queued" || current.kind === "running"
+              ? { ...current, kind: "failed", jobId: activeJobId, message: error.message }
+              : current);
+            return;
+          }
           setJobMessage(error instanceof Error ? error.message : "ติดตามงานไม่ได้ กรุณาลองใหม่");
           timer = setTimeout(() => void poll(), 2500);
         }
@@ -144,8 +164,9 @@ export function useTranscriptionSession() {
     ownedObjectUrl.current = url;
     setSelectionError(null);
     setJobMessage(null);
+    setModelSelection({ model: serviceDefaultModel, source: "service" });
     setSession({ kind: "selected", file, url, durationSeconds: null });
-  }, [releaseObjectUrl]);
+  }, [releaseObjectUrl, serviceDefaultModel]);
 
   const clearSession = useCallback(() => {
     sessionIdentity.current += 1;
@@ -155,7 +176,20 @@ export function useTranscriptionSession() {
     setSession({ kind: "empty" });
     setSelectionError(null);
     setJobMessage(null);
-  }, [releaseObjectUrl]);
+    setModelSelection({ model: serviceDefaultModel, source: "service" });
+  }, [releaseObjectUrl, serviceDefaultModel]);
+
+  const chooseModel = useCallback((model: WhisperModel) => {
+    setModelSelection({ model, source: "user" });
+  }, []);
+
+  const retryFailedJob = useCallback(() => {
+    setSession((current) => current.kind === "failed"
+      ? { kind: "selected", file: current.file, url: current.url, durationSeconds: current.durationSeconds }
+      : current);
+    setSelectionError(null);
+    setJobMessage(null);
+  }, []);
 
   const updateDuration = useCallback((mediaUrl: string, seconds: number) => {
     if (ownedObjectUrl.current !== mediaUrl) return;
@@ -172,7 +206,7 @@ export function useTranscriptionSession() {
   const startTranscription = useCallback(async () => {
     if (session.kind !== "selected" || uploadController.current) return;
     const identity = sessionIdentity.current;
-    if (serviceState !== "ready") {
+    if (serviceState !== "ready" || selectedModel === null) {
       if (isCurrentSession(identity)) setJobMessage("STT service ยังไม่พร้อม ตรวจสอบว่า service ทำงานอยู่บนเครื่องนี้แล้วลองอีกครั้ง");
       return;
     }
@@ -193,7 +227,7 @@ export function useTranscriptionSession() {
       ? { ...original, kind: "submitting", uploadPercent: 0 }
       : current);
     try {
-      const jobId = await submitFile(original.file, (uploadPercent) => {
+      const jobId = await submitFile(original.file, selectedModel, (uploadPercent) => {
         setSession((current) => isCurrentSession(identity) && current.kind === "submitting" && current.url === original.url
           ? { ...current, uploadPercent }
           : current);
@@ -213,7 +247,7 @@ export function useTranscriptionSession() {
     } finally {
       if (uploadController.current === controller) uploadController.current = null;
     }
-  }, [isCurrentSession, serviceState, session]);
+  }, [isCurrentSession, selectedModel, serviceState, session]);
 
   const media: MediaFile | null = session.kind === "empty" ? null : session;
 
@@ -221,12 +255,15 @@ export function useTranscriptionSession() {
     session,
     media,
     serviceState,
+    selectedModel,
+    chooseModel,
     selectionError,
     setSelectionError,
     jobMessage,
     checkService,
     selectFile,
     clearSession,
+    retryFailedJob,
     updateDuration,
     startTranscription,
   };

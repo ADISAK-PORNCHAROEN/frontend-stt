@@ -22,6 +22,12 @@ export function formatFileSize(bytes: number): string {
   return `${bytes} B`;
 }
 
+export function formatMediaType(file: Pick<File, "name" | "type">): string {
+  if (file.type) return file.type;
+  const extension = file.name.split(".").pop()?.toUpperCase();
+  return extension ? `${extension} (จากนามสกุล)` : "ไม่ทราบชนิดไฟล์";
+}
+
 export function formatDuration(seconds: number): string {
   return formatTimestamp(seconds, false);
 }
