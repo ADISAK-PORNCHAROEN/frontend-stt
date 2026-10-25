@@ -18,7 +18,8 @@ test("#2 accepts a local WAV through keyboard browsing, focuses the start action
   await (await chooserPromise).setFiles(media);
 
   const sourcePanel = page.locator(".source-panel");
-  await expect(sourcePanel.getByText(/sample\.wav.*audio\/wav/)).toBeVisible();
+  await expect(sourcePanel).toContainText("sample.wav");
+  await expect(sourcePanel).toContainText("audio/wav");
   await expect(page.locator("audio")).toBeVisible();
   await expect(page.locator(".player-meta")).toContainText("ความยาว 00:28");
   const startButton = page.getByRole("button", { name: "เริ่มถอดเสียง" });
@@ -45,7 +46,8 @@ test("#2 accepts a local WAV dropped into the file area", async ({ page, app, st
     target.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: transfer }));
   }, data);
 
-  await expect(page.locator(".source-panel").getByText(/dropped\.wav.*audio\/wav/)).toBeVisible();
+  await expect(page.locator(".source-panel")).toContainText("dropped.wav");
+  await expect(page.locator(".source-panel")).toContainText("audio/wav");
   await expect(page.locator("audio")).toBeVisible();
 });
 
@@ -196,8 +198,9 @@ test("#3 gives Thai recovery for service, queue, invalid-media, expired-job, and
   const choose = async () => page.locator('input[type="file"]').setInputFiles(silentWav({ durationSeconds: 1 }));
   const clear = async () => page.getByRole("button", { name: "เลือกไฟล์ใหม่" }).click();
 
-  stt.reset({ kind: "unavailable" });
   await choose();
+  await expect(page.getByRole("button", { name: "เริ่มถอดเสียง" })).toBeEnabled();
+  stt.reset({ kind: "unavailable" });
   await page.getByRole("button", { name: "เริ่มถอดเสียง" }).click();
   await expect(page.locator(".error-panel")).toContainText("เชื่อมต่อ STT service ไม่ได้");
   await clear();
@@ -256,7 +259,7 @@ test("#4 reviews, seeks, follows, and exports the transcript on desktop and mobi
   await expect(transcript).toBeVisible();
   await expect(transcript.getByText(/<script>ไม่ควรถูกแสดงเป็น HTML<\/script>/)).toBeVisible();
   await expect(transcript.locator("script, [contenteditable='true']")).toHaveCount(0);
-  await expect(transcript.locator("textarea.segment-editor")).toHaveCount(14);
+  await expect(transcript.locator("textarea.segment-editor")).toHaveCount(0);
   const segmentButtons = transcript.locator(".segment-button");
   await expect(segmentButtons).toHaveCount(14);
   await expect(segmentButtons.nth(0).locator(".segment-time")).toHaveAttribute("dateTime", "PT0S");
@@ -271,7 +274,7 @@ test("#4 reviews, seeks, follows, and exports the transcript on desktop and mobi
   await page.screenshot({ path: testInfo.outputPath("issue-4-completed-desktop.png"), fullPage: true });
 
   const secondSegment = segmentButtons.nth(1);
-  await secondSegment.click();
+  await secondSegment.locator(".segment-copy").click();
   const audio = page.locator("audio");
   const audioTime = () => audio.evaluate((element) => {
     if (!(element instanceof HTMLAudioElement)) throw new Error("Audio player was not found");
@@ -302,6 +305,27 @@ test("#4 reviews, seeks, follows, and exports the transcript on desktop and mobi
   const lastSegment = segmentButtons.nth(13);
   await expect(lastSegment).toHaveAttribute("aria-current", "true");
   await expect.poll(() => transcript.locator(".transcript-list").evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+
+  const transcriptList = transcript.locator(".transcript-list");
+  const listBox = await transcriptList.boundingBox();
+  expect(listBox).not.toBeNull();
+  await page.mouse.move((listBox?.x ?? 0) + 100, (listBox?.y ?? 0) + 120);
+  await page.mouse.wheel(0, -120);
+  await expect(page.getByRole("button", { name: "กลับไปติดตามเสียง" })).toBeVisible();
+  const manualScrollTop = await transcriptList.evaluate((element) => element.scrollTop);
+  expect(manualScrollTop).toBeGreaterThan(0);
+  await audio.evaluate((element) => {
+    if (!(element instanceof HTMLAudioElement)) throw new Error("Audio player was not found");
+    element.pause();
+    element.currentTime = 0.5;
+    element.dispatchEvent(new Event("timeupdate"));
+  });
+  await expect(segmentButtons.nth(0)).toHaveAttribute("aria-current", "true");
+  await expect.poll(() => transcriptList.evaluate((element) => element.scrollTop)).toBe(manualScrollTop);
+  const pageScrollBeforeReturn = await page.evaluate(() => window.scrollY);
+  await page.getByRole("button", { name: "กลับไปติดตามเสียง" }).click();
+  await expect.poll(() => transcriptList.evaluate((element) => element.scrollTop)).toBeLessThan(manualScrollTop);
+  expect(await page.evaluate(() => window.scrollY)).toBe(pageScrollBeforeReturn);
 
   const txtDownloadPromise = page.waitForEvent("download");
   await page.getByRole("link", { name: "ดาวน์โหลด TXT" }).click();
@@ -364,6 +388,7 @@ test("#10 replays, edits, views original, saves once per attempt, and exports th
   const segmentButtons = transcript.locator(".segment-button");
   const timestampsBefore = await transcript.locator(".segment-time").allTextContents();
   await expect(segmentButtons).toHaveCount(14);
+  await expect(transcript.locator("textarea.segment-editor")).toHaveCount(0);
 
   const audio = page.locator("audio");
   const currentTime = () => audio.evaluate((element) => {
@@ -380,12 +405,34 @@ test("#10 replays, edits, views original, saves once per attempt, and exports th
   expect(await currentTime()).toBeGreaterThanOrEqual(4.4);
   expect(await currentTime()).toBeLessThanOrEqual(4.7);
 
+  const firstEdit = transcript.getByRole("button", { name: "แก้ไขข้อความช่วงเวลา 00:00.0" });
+  const secondEdit = transcript.getByRole("button", { name: "แก้ไขข้อความช่วงเวลา 00:02.0" });
+  await firstEdit.focus();
+  await page.keyboard.press("Enter");
   const firstEditor = transcript.getByRole("textbox", { name: "แก้ไขข้อความช่วงเวลา 00:00.0" });
+  await firstEditor.fill("ประโยคแรกที่แก้ด้วยคีย์บอร์ด");
+  await expect(secondEdit).toBeDisabled();
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("button", { name: "เก็บช่วงนี้" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(firstEdit).toBeVisible();
+  await expect(firstEdit).toBeFocused();
+  await expect(transcript.locator(".segment-copy").nth(0)).toContainText("ประโยคแรกที่แก้ด้วยคีย์บอร์ด");
+
+  await secondEdit.click();
   const secondEditor = transcript.getByRole("textbox", { name: "แก้ไขข้อความช่วงเวลา 00:02.0" });
-  await firstEditor.focus();
-  await page.keyboard.press("Control+A");
-  await page.keyboard.type("ประโยคแรกที่แก้ด้วยคีย์บอร์ด");
-  await secondEditor.fill("ประโยคที่สองที่แก้ไข");
+  await expect(firstEdit).toBeDisabled();
+  await secondEditor.fill("ฉบับชั่วคราวที่ยกเลิก");
+  await page.getByRole("button", { name: "ยกเลิก" }).click();
+  await expect(secondEdit).toBeVisible();
+  await expect(secondEdit).toBeFocused();
+  await expect(firstEdit).toBeEnabled();
+  await expect(transcript.locator(".segment-copy").nth(0)).toContainText("ประโยคแรกที่แก้ด้วยคีย์บอร์ด");
+
+  await secondEdit.click();
+  await transcript.getByRole("textbox", { name: "แก้ไขข้อความช่วงเวลา 00:02.0" }).fill("ประโยคที่สองที่แก้ไข");
+  await page.getByRole("button", { name: "เก็บช่วงนี้" }).click();
+  await expect(firstEdit).toBeEnabled();
   await expect(transcript.locator(".unsaved-note")).toContainText("ยังไม่ได้บันทึก");
   await expect(page.getByRole("button", { name: "ดาวน์โหลด JSON" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "ดาวน์โหลด TXT" })).toBeDisabled();
@@ -398,25 +445,34 @@ test("#10 replays, edits, views original, saves once per attempt, and exports th
   await expect(transcript.getByRole("heading", { name: "บทถอดเสียงต้นฉบับ" })).toBeVisible();
   await expect(transcript.locator(".segment-copy").nth(0)).toContainText("ช่วงเสียงภาษาไทยลำดับที่ 1");
   await page.getByRole("button", { name: "กลับไปฉบับแก้ไข" }).click();
-  await expect(firstEditor).toHaveValue("ประโยคแรกที่แก้ด้วยคีย์บอร์ด");
-  await expect(secondEditor).toHaveValue("ประโยคที่สองที่แก้ไข");
+  await expect(transcript.locator(".segment-copy").nth(0)).toContainText("ประโยคแรกที่แก้ด้วยคีย์บอร์ด");
+  await expect(transcript.locator(".segment-copy").nth(1)).toContainText("ประโยคที่สองที่แก้ไข");
 
   const saveButton = page.getByRole("button", { name: "บันทึกการแก้ไข" });
   await saveButton.focus();
   await page.keyboard.press("Enter");
   await expect(transcript.getByRole("alert")).toContainText("บันทึกการแก้ไขไม่สำเร็จ");
-  await expect(firstEditor).toHaveValue("ประโยคแรกที่แก้ด้วยคีย์บอร์ด");
-  await expect(secondEditor).toHaveValue("ประโยคที่สองที่แก้ไข");
+  await expect(transcript.locator(".segment-copy").nth(0)).toContainText("ประโยคแรกที่แก้ด้วยคีย์บอร์ด");
+  await expect(transcript.locator(".segment-copy").nth(1)).toContainText("ประโยคที่สองที่แก้ไข");
   await expect(page.getByRole("button", { name: "ดาวน์โหลด TXT" })).toBeDisabled();
   expect(stt.saves()).toHaveLength(1);
 
   await page.setViewportSize({ width: 375, height: 812 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
-  await expect(firstEditor).toBeVisible();
-  await expect(page.getByRole("button", { name: "บันทึกการแก้ไข" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "ลองบันทึกอีกครั้ง" })).toBeVisible();
+  const thirdEdit = transcript.getByRole("button", { name: "แก้ไขข้อความช่วงเวลา 00:04.0" });
+  await thirdEdit.focus();
+  await page.keyboard.press("Enter");
+  await transcript.getByRole("textbox", { name: "แก้ไขข้อความช่วงเวลา 00:04.0" }).fill("ยกเลิกด้วยคีย์บอร์ด");
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("button", { name: "ยกเลิก" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(thirdEdit).toBeVisible();
+  await expect(thirdEdit).toBeFocused();
   await page.screenshot({ path: testInfo.outputPath("issue-10-review-unsaved-mobile.png"), fullPage: true });
 
-  await page.getByRole("button", { name: "บันทึกการแก้ไข" }).click();
+  await page.getByRole("button", { name: /บันทึกการแก้ไข|ลองบันทึกอีกครั้ง/ }).click();
   await expect(page.getByRole("status").filter({ hasText: "บันทึกแล้ว" })).toBeVisible();
   await expect(page.getByRole("link", { name: "ดาวน์โหลด JSON" })).toBeEnabled();
   await expect.poll(() => stt.saves().length).toBe(2);
@@ -428,6 +484,11 @@ test("#10 replays, edits, views original, saves once per attempt, and exports th
   ]);
   expect(await transcript.locator(".segment-time").allTextContents()).toEqual(timestampsBefore);
   expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+
+  await page.getByRole("button", { name: "ดูต้นฉบับ" }).click();
+  await expect(transcript.locator(".segment-copy").nth(0)).toContainText("ช่วงเสียงภาษาไทยลำดับที่ 1");
+  await page.getByRole("button", { name: "กลับไปฉบับแก้ไข" }).click();
+  await expect(transcript.locator(".segment-copy").nth(0)).toContainText("ประโยคแรกที่แก้ด้วยคีย์บอร์ด");
 
   const jsonDownloadPromise = page.waitForEvent("download");
   await page.getByRole("link", { name: "ดาวน์โหลด JSON" }).click();

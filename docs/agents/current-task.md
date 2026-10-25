@@ -26,3 +26,11 @@ The user approved the design brief and authorized implementation. Keep architect
 - Verification used the controllable local STT fixture and Playwright, not the real STT service.
 - Commands passed: `npm run test -- --reporter=list` (19 tests), `npm run lint`, and `npm run build`.
 - Desktop and mobile screenshots were visually reviewed for the model-selection and unsaved-review states.
+
+## Completed on 2026-10-26 — frontend-stt #12–#15
+
+- Completed and closed leaf issues #13, #14, and #15 against their GitHub acceptance criteria. Parent/spec #12 remains open.
+- #13 adds the fixture-backed unit, same-origin API, browser, coverage, and screenshot-report harness. #14 keeps Clear Timeline across all four workspace states, improves the first-run page hierarchy, and verifies desktop/mobile layout. #15 completes row replay/follow, one-at-a-time staged edits, full-set save and recovery, original/latest views, and saved JSON/TXT/SRT exports.
+- Verification used synthetic media and the controllable local service fixture. It does not establish transcription against the real STT service.
+- Final checks passed: `npm run test:all` (46 unit, 9 API integration, and 13 browser/visual tests; coverage 96.22% statements, 90.8% branches, 97.41% functions, and 98.82% lines), `npx tsc --noEmit`, `npm run lint` (0 errors; one warning from ignored coverage output), and `npm run build`.
+- Playwright HTML report: `playwright-report/index.html`; the report includes passing screenshots for the start, processing, completed, and editing states at 1440×1000, 1280×720, and 390×844. The first-run page was also visually reviewed at desktop and mobile sizes after the follow-up polish.
