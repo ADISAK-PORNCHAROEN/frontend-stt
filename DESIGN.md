@@ -91,9 +91,9 @@ Do not bring back the old dark navy and amber palette. Keep the blue accent purp
 
 Center the page in a shell capped at 1380px. Use 32px outer insets on desktop and 16px on small screens. Keep only the product mark in the compact header. Show service status beside file selection while it is checking or unavailable, with a retry action for unavailable service; omit the healthy status indicator.
 
-Place file selection above the work areas. On wide screens show the player and transcript side by side, with more room for the transcript. At 900px and below, stack them and preserve natural page scrolling. At 600px and below, keep the file action full width and the header on one row.
+Place file selection above the work areas. On wide screens show the player and transcript side by side, with more room for the transcript. Stack them below 1024px and preserve natural page scrolling. At 600px and below, keep the file action full width and the header on one row. At 1280×720 and larger, anchor the shell to the viewport with the header and footer at its edges; keep the completed transcript as the only internal scroll region. Below that minimum, let the main area scroll naturally without compressing controls.
 
-Use 4px spacing increments. Panels use 16px corners and a restrained shadow. The transcript panel has its own scroll area while the page remains scrollable.
+Use 4px spacing increments. Panels use 16px corners and a restrained shadow. The transcript panel uses internal scrolling at the supported desktop-fit size; below that size, the page scrolls naturally.
 
 ## Interaction details
 

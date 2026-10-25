@@ -18,7 +18,8 @@ test("#2 accepts a local WAV through keyboard browsing, focuses the start action
   await (await chooserPromise).setFiles(media);
 
   const sourcePanel = page.locator(".source-panel");
-  await expect(sourcePanel.getByText(/sample\.wav.*audio\/wav/)).toBeVisible();
+  await expect(sourcePanel).toContainText("sample.wav");
+  await expect(sourcePanel).toContainText("audio/wav");
   await expect(page.locator("audio")).toBeVisible();
   await expect(page.locator(".player-meta")).toContainText("ความยาว 00:28");
   const startButton = page.getByRole("button", { name: "เริ่มถอดเสียง" });
@@ -45,7 +46,8 @@ test("#2 accepts a local WAV dropped into the file area", async ({ page, app, st
     target.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: transfer }));
   }, data);
 
-  await expect(page.locator(".source-panel").getByText(/dropped\.wav.*audio\/wav/)).toBeVisible();
+  await expect(page.locator(".source-panel")).toContainText("dropped.wav");
+  await expect(page.locator(".source-panel")).toContainText("audio/wav");
   await expect(page.locator("audio")).toBeVisible();
 });
 

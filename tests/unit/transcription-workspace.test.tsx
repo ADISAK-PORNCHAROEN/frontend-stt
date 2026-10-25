@@ -80,13 +80,13 @@ describe("TranscriptionWorkspace", () => {
     Object.defineProperty(HTMLMediaElement.prototype, "pause", { configurable: true, value: vi.fn() });
   });
 
-  it("renders the home state, hides ready/checking notices, and retries an unavailable service", () => {
+  it("renders the home state, shows checking status, and retries an unavailable service", () => {
     const state = sessionState({ serviceState: "checking" });
     mocks.useTranscriptionSession.mockReturnValue(state);
     const { rerender } = render(<TranscriptionWorkspace />);
     expect(screen.getByRole("heading", { name: /ฟังทุกช่วงเวลา.*อ่านทุกถ้อยคำ/ })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "จากไฟล์สู่บทถอดเสียง" })).toBeInTheDocument();
-    expect(screen.queryByText("กำลังตรวจการเชื่อมต่อ STT service")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "แผนที่การฟัง" })).toBeInTheDocument();
+    expect(screen.getByText("กำลังตรวจการเชื่อมต่อ STT service")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("เรียกดูไฟล์"), { target: { files: [new File(["home"], "home.mp3", { type: "audio/mpeg" })] } });
     expect(state.selectFile).toHaveBeenCalledWith(expect.objectContaining({ name: "home.mp3" }));
 
@@ -109,7 +109,7 @@ describe("TranscriptionWorkspace", () => {
     expect(selected.chooseModel).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole("button", { name: "เริ่มถอดเสียง" }));
     expect(selected.startTranscription).toHaveBeenCalledOnce();
-    fireEvent.change(screen.getByLabelText("เรียกดูไฟล์"), { target: { files: [new File(["another"], "again.mp3", { type: "audio/mpeg" })] } });
+    fireEvent.change(screen.getByLabelText("เปลี่ยนไฟล์"), { target: { files: [new File(["another"], "again.mp3", { type: "audio/mpeg" })] } });
     expect(selected.selectFile).toHaveBeenCalledWith(expect.objectContaining({ name: "again.mp3" }));
     fireEvent.click(screen.getByRole("button", { name: "เลือกไฟล์ใหม่" }));
     expect(selected.clearSession).toHaveBeenCalledOnce();
@@ -145,7 +145,7 @@ describe("TranscriptionWorkspace", () => {
       mocks.useTranscriptionSession.mockReturnValue(state);
       const view = render(<TranscriptionWorkspace />);
       if (index === 0) expect(document.querySelector(".progress-panel")).toHaveTextContent("กำลังส่งไฟล์ไปยัง service");
-      if (index === 1) expect(screen.getByText("อยู่ในคิวถอดเสียง", { exact: true })).toBeInTheDocument();
+      if (index === 1) expect(document.querySelector(".progress-label h2")).toHaveTextContent("อยู่ในคิวถอดเสียง");
       if (index === 2) expect(screen.getByText("กำลังถอดเสียง", { exact: true }).parentElement).toHaveTextContent("47%");
       if (index === 2) expect(document.querySelector(".progress-panel")).toHaveTextContent("กำลังรอการตอบกลับ");
       view.unmount();
@@ -203,7 +203,7 @@ describe("TranscriptionWorkspace", () => {
     mocks.useTranscriptReview.mockReturnValue(cleanReview);
     const view = render(<TranscriptionWorkspace />);
     expect(screen.getByRole("link", { name: "ดาวน์โหลด TXT" })).toHaveAttribute("href", `/api/stt/jobs/${JOB_ID}/result?format=txt`);
-    expect(document.querySelector(".result-toolbar [role='status']")).toHaveTextContent("ถอดเสียงเสร็จแล้ว");
+    expect(screen.getByText(/ถอดเสียงเสร็จแล้ว/)).toBeInTheDocument();
     expect(mocks.useTranscriptReview).toHaveBeenCalledWith(JOB_ID, transcript);
     const succeededAudio = screen.getByLabelText("เล่นไฟล์เสียง sample.wav");
     Object.defineProperty(succeededAudio, "duration", { configurable: true, value: 28 });
