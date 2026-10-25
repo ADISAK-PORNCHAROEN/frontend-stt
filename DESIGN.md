@@ -89,7 +89,7 @@ Do not bring back the old dark navy and amber palette. Keep the blue accent purp
 
 ## Layout
 
-Center the page in a shell capped at 1380px. Use 32px outer insets on desktop and 16px on small screens. Keep the product mark left and service status right in a compact header.
+Center the page in a shell capped at 1380px. Use 32px outer insets on desktop and 16px on small screens. Keep only the product mark in the compact header. Show service status beside file selection while it is checking or unavailable, with a retry action for unavailable service; omit the healthy status indicator.
 
 Place file selection above the work areas. On wide screens show the player and transcript side by side, with more room for the transcript. At 900px and below, stack them and preserve natural page scrolling. At 600px and below, keep the file action full width and the header on one row.
 
@@ -97,11 +97,13 @@ Use 4px spacing increments. Panels use 16px corners and a restrained shadow. The
 
 ## Interaction details
 
-- Use blue with white text for the primary start action; keep secondary actions outlined.
+- Use blue with white text for the primary start and save actions; keep secondary actions outlined.
 - Keep the upload target compact and dashed, with file types and retention information near the action.
 - Use a dark viewport for video inside the light media frame.
 - Pair each timestamp with a thin rail and point. Mark the active row with a pale-blue fill, blue leading edge, rail, and point.
-- Keep transcript text read-only. Clicking a timestamp seeks the recording.
+- Keep the original ASR transcript immutable. Let the owner edit existing segment text while preserving IDs, order, times, and structure; saving and viewing the original are explicit actions.
+- Let the timestamp control replay its segment with up to 0.5 seconds of context on either side, then stop. Disable JSON/TXT/SRT downloads until the current edits are saved.
+- Show Turbo and large-v3 before starting a job, with the service-configured default selected.
 - Preserve visible keyboard focus and reduced-motion support.
 
 ## Do

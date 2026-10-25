@@ -12,7 +12,7 @@ export async function GET(request: Request, { params }: RouteContext): Promise<R
   }
 
   const format = new URL(request.url).searchParams.get("format");
-  if (format !== "json" && format !== "txt" && format !== "srt") {
+  if (format !== "json" && format !== "txt" && format !== "srt" && format !== "original-json") {
     return Response.json(
       { error: { code: "invalid_request", message: "Unsupported result format" } },
       { status: 400, headers: { "Cache-Control": "no-store" } },

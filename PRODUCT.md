@@ -12,7 +12,7 @@ The project owner is the only user in the first version. They open the web app o
 
 ## Product Purpose
 
-The product lets the owner transcribe an audio or video file and review the resulting transcript against playback of the original file. Success means the owner can play or seek the media, follow timestamped transcript segments, and download the transcript as TXT or SRT.
+The product lets the owner transcribe an audio or video file and review the result against playback of the original file. Success means the owner can select a Whisper model, replay timestamped segments, correct segment text, save the review, view the original ASR transcript, and download the latest saved transcript as JSON, TXT, or SRT.
 
 ## Positioning
 
@@ -32,8 +32,10 @@ The frontend follows one transcription job at a time. The service keeps successf
 - The current service limits uploads to 1 GiB, media duration to two hours, and its waiting queue to ten jobs.
 - The service detects the language automatically; its HTTP API does not accept a per-job language selection.
 - The interface language is Thai; transcript content remains in the language recognized by the service.
-- Transcript results are read-only in the frontend. Timestamped segments can be selected to seek playback; the active segment is highlighted and followed during playback.
-- The frontend offers transcript display and TXT/SRT downloads. It does not keep a durable job or transcript library.
+- The model selector offers Turbo and large-v3. Its initial value comes from the configured model returned by service readiness; the selected model is sent through the same-origin upload route.
+- Each timestamped segment can be replayed from up to 0.5 seconds before through up to 0.5 seconds after its bounds, then playback stops. The active segment is highlighted and followed during playback.
+- The owner may edit text for existing segments only. Saving sends the complete segment ID/text set; order, IDs, times, and segment structure remain unchanged. The original ASR transcript remains available as an immutable view.
+- JSON/TXT/SRT downloads use the latest saved transcript. Downloads are disabled while edits are unsaved or saving. Review drafts live only in the current page session; there is no job history or durable transcript library.
 - The user reviews a selected file and explicitly starts transcription. The interface is desktop-first and must remain usable on mobile.
 - When the service is unavailable or a job fails, the interface explains the failure in user-facing language and lets the user submit the file again.
 - The service is loopback-only, has no authentication, and does not accept cross-origin browser requests. Its current API does not return the uploaded media for playback.
@@ -50,4 +52,5 @@ The frontend follows one transcription job at a time. The service keeps successf
 - Keep the original media available for playback in the current browser session so the user can check the transcript against its source.
 - Show service status and failures clearly; do not imply a job completed when the service has not published its result.
 - Keep the first version local, single-user, and ephemeral.
-- Preserve the service's transcript as generated; provide exports without introducing an unapproved editing workflow.
+- Keep the original ASR transcript immutable. Let the owner edit text only, preserve segment IDs/order/times, and send one complete save through the same-origin API.
+- Keep review drafts in memory for the current page session. Require a successful save before downloads use edited text.

@@ -2,9 +2,10 @@ import "server-only";
 
 const MAX_UPLOAD_BYTES = 1024 ** 3;
 const MULTIPART_OVERHEAD_BYTES = 64 * 1024;
+const MAX_TRANSCRIPT_UPDATE_BYTES = 16 * 1024 * 1024;
 
 type ProxyOptions = {
-  method: "GET" | "POST";
+  method: "GET" | "POST" | "PUT";
   body?: ReadableStream<Uint8Array>;
   headers?: HeadersInit;
   didExceedLimit?: () => boolean;
@@ -115,8 +116,8 @@ export async function proxyToService(path: string, options: ProxyOptions): Promi
 
 export async function proxyUpload(request: Request): Promise<Response> {
   const requestOrigin = request.headers.get("origin");
-  const expectedOrigin = new URL(request.url).origin;
-  if (!requestOrigin || requestOrigin !== expectedOrigin) {
+  const expectedOrigin = getLocalRequestOrigin(request);
+  if (!requestOrigin || !expectedOrigin || requestOrigin !== expectedOrigin) {
     return errorResponse(403, "forbidden_origin", "Cross-origin requests are not allowed");
   }
 
@@ -160,8 +161,67 @@ export function proxyJobStatus(jobId: string): Promise<Response> {
   return proxyToService(`/jobs/${jobId}`, { method: "GET" });
 }
 
-export function proxyJobResult(jobId: string, format: "json" | "txt" | "srt"): Promise<Response> {
+export function proxyJobResult(jobId: string, format: "json" | "txt" | "srt" | "original-json"): Promise<Response> {
   return proxyToService(`/jobs/${jobId}/result?format=${format}`, { method: "GET" });
+}
+
+export function proxyTranscriptUpdate(request: Request, jobId: string): Promise<Response> | Response {
+  const requestOrigin = request.headers.get("origin");
+  const expectedOrigin = getLocalRequestOrigin(request);
+  if (!requestOrigin || !expectedOrigin || requestOrigin !== expectedOrigin) {
+    return errorResponse(403, "forbidden_origin", "Cross-origin requests are not allowed");
+  }
+
+  const contentType = request.headers.get("content-type") ?? "";
+  if (!/^application\/json(?:\s*;|$)/i.test(contentType)) {
+    return errorResponse(400, "invalid_request", "A JSON transcript update is required");
+  }
+
+  const contentLength = request.headers.get("content-length");
+  if (contentLength !== null) {
+    const length = Number(contentLength);
+    if (!Number.isSafeInteger(length) || length < 0) {
+      return errorResponse(400, "invalid_request", "Invalid transcript update length");
+    }
+    if (length > MAX_TRANSCRIPT_UPDATE_BYTES) {
+      return errorResponse(413, "transcript_too_large", "Transcript update exceeds the 16 MiB limit");
+    }
+  }
+  if (!request.body) return errorResponse(400, "invalid_request", "The transcript update is missing");
+
+  const headers = new Headers({ "Content-Type": contentType });
+  if (contentLength !== null) headers.set("Content-Length", contentLength);
+  let exceededLimit = false;
+  return proxyToService(`/jobs/${jobId}/transcript`, {
+    method: "PUT",
+    body: boundedBody(request.body, MAX_TRANSCRIPT_UPDATE_BYTES, () => { exceededLimit = true; }),
+    headers,
+    didExceedLimit: () => exceededLimit,
+  });
+}
+
+function getLocalRequestOrigin(request: Request): string | null {
+  const requestUrl = new URL(request.url);
+  const host = request.headers.get("host");
+  if (!host) return null;
+
+  try {
+    const hostUrl = new URL(`${requestUrl.protocol}//${host}`);
+    if (
+      !["127.0.0.1", "localhost"].includes(hostUrl.hostname) ||
+      hostUrl.port !== requestUrl.port ||
+      hostUrl.username !== "" ||
+      hostUrl.password !== "" ||
+      hostUrl.pathname !== "/" ||
+      hostUrl.search !== "" ||
+      hostUrl.hash !== ""
+    ) {
+      return null;
+    }
+    return hostUrl.origin;
+  } catch {
+    return null;
+  }
 }
 
 export function isValidJobId(value: string): boolean {
