@@ -91,6 +91,32 @@
   const SKIP_TAGS = new Set([
     'html', 'head', 'body', 'script', 'style', 'link', 'meta', 'noscript', 'br', 'wbr',
   ]);
+  const PREVIEW_HTML_TAGS = new Set([
+    'a', 'abbr', 'b', 'blockquote', 'br', 'button', 'caption', 'code', 'dd', 'del',
+    'details', 'div', 'dl', 'dt', 'em', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr',
+    'i', 'img', 'input', 'label', 'li', 'ol', 'p', 'pre', 's', 'section', 'small',
+    'span', 'strong', 'sub', 'sup', 'table', 'tbody', 'td', 'th', 'thead', 'tr', 'ul',
+  ]);
+  const PREVIEW_SVG_TAGS = new Set([
+    'circle', 'ellipse', 'g', 'line', 'path', 'polygon', 'polyline', 'rect', 'svg',
+  ]);
+  const PREVIEW_BLOCKED_TAGS = new Set([
+    'base', 'embed', 'form', 'iframe', 'link', 'math', 'meta', 'object', 'script', 'style',
+  ]);
+  const PREVIEW_HTML_ATTRIBUTES = new Set([
+    'alt', 'checked', 'class', 'colspan', 'disabled', 'height', 'id', 'max', 'maxlength',
+    'min', 'minlength', 'multiple', 'name', 'placeholder', 'readonly', 'required', 'role',
+    'rowspan', 'scope', 'selected', 'size', 'title', 'type', 'value', 'width',
+  ]);
+  const PREVIEW_SVG_ATTRIBUTES = new Set([
+    'cx', 'cy', 'd', 'fill', 'height', 'opacity', 'points', 'preserveaspectratio', 'r',
+    'rx', 'ry', 'stroke', 'stroke-dasharray', 'stroke-dashoffset', 'stroke-linecap',
+    'stroke-linejoin', 'stroke-width', 'transform', 'viewbox', 'width', 'x', 'x1', 'x2',
+    'y', 'y1', 'y2',
+  ]);
+  const SAFE_PREVIEW_IMAGE = /^data:image\/(?:png|gif|jpe?g|webp);base64,[a-z0-9+/=\s]+$/i;
+  const HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
+  const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 
   // Command vocabulary (values + labels + icons) comes from the canonical source,
   // skill/scripts/live/vocabulary.mjs, which live-server.mjs serializes into
@@ -13186,10 +13212,10 @@ void main() {
         const host = document.createElement('div');
         const sub = host.attachShadow({ mode: 'open' });
         const style = document.createElement('style');
-        style.textContent = c.css || '';
+        style.textContent = safePreviewCss(c.css || '');
         sub.appendChild(style);
         const container = document.createElement('div');
-        container.innerHTML = c.html || '';
+        container.appendChild(sanitizePreviewHtml(c.html || ''));
         sub.appendChild(container);
         stage.appendChild(host);
 
@@ -13228,6 +13254,53 @@ void main() {
       }
     }
     return groups;
+  }
+
+  function safePreviewCss(css) {
+    const source = String(css || '');
+    // Component styles remain useful for normal layout, while external loads
+    // and CSS escapes are rejected so sidecar styles cannot fetch remote content.
+    if (/\\|@import\b|url\s*\(/i.test(source)) return '';
+    return source;
+  }
+
+  function sanitizePreviewHtml(html) {
+    const template = document.createElement('template');
+    template.innerHTML = String(html || '');
+
+    for (const element of Array.from(template.content.querySelectorAll('*'))) {
+      const tag = element.localName.toLowerCase();
+      if (PREVIEW_BLOCKED_TAGS.has(tag)) {
+        element.remove();
+        continue;
+      }
+
+      const isSvg = element.namespaceURI === SVG_NAMESPACE;
+      const isHtml = element.namespaceURI === HTML_NAMESPACE;
+      if ((!isHtml && !isSvg) || (isSvg ? !PREVIEW_SVG_TAGS.has(tag) : !PREVIEW_HTML_TAGS.has(tag))) {
+        element.replaceWith(...Array.from(element.childNodes));
+        continue;
+      }
+
+      for (const attribute of Array.from(element.attributes)) {
+        const name = attribute.name.toLowerCase();
+        const allowed = PREVIEW_HTML_ATTRIBUTES.has(name) ||
+          (isSvg && PREVIEW_SVG_ATTRIBUTES.has(name)) ||
+          (name === 'src' && tag === 'img' && SAFE_PREVIEW_IMAGE.test(attribute.value)) ||
+          name.startsWith('aria-') || name.startsWith('data-');
+
+        if (!allowed || name.startsWith('on') || name === 'style' || name === 'srcdoc') {
+          element.removeAttribute(attribute.name);
+          continue;
+        }
+
+        if (name === 'src' && (tag !== 'img' || !SAFE_PREVIEW_IMAGE.test(attribute.value))) {
+          element.removeAttribute(attribute.name);
+        }
+      }
+    }
+
+    return template.content;
   }
 
   function titleForKind(kind, count) {
@@ -13454,12 +13527,24 @@ void main() {
     // Code spans
     s = s.replace(/`([^`]+)`/g, (_, code) => `<code>${code}</code>`);
     // Links [text](url)
-    s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, t, u) => `<a href="${u}" target="_blank" rel="noopener noreferrer">${t}</a>`);
+    s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, t, u) => {
+      if (!isSafeMarkdownHref(u)) return t;
+      return `<a href="${u}" target="_blank" rel="noopener noreferrer">${t}</a>`;
+    });
     // Bold
     s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
     // Italic (only single *…*, skip if inside bold already handled)
     s = s.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
     return s;
+  }
+
+  function isSafeMarkdownHref(value) {
+    try {
+      const url = new URL(value, document.baseURI);
+      return url.protocol === 'http:' || url.protocol === 'https:';
+    } catch {
+      return false;
+    }
   }
 
   function highlightBold(text) {
