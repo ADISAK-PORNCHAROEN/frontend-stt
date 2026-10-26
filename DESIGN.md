@@ -91,9 +91,9 @@ Do not bring back the old dark navy and amber palette. Keep the blue accent purp
 
 Center the page in a shell capped at 1380px. Use 32px outer insets on desktop and 16px on small screens. Keep only the product mark in the compact header. Show service status beside file selection while it is checking or unavailable, with a retry action for unavailable service; omit the healthy status indicator.
 
-Place file selection above the work areas. On wide screens show the player and transcript side by side, with more room for the transcript. Stack them below 1024px and preserve natural page scrolling. At 600px and below, keep the file action full width and the header on one row. At 1280×720 and larger, anchor the shell to the viewport with the header and footer at its edges; keep the completed transcript as the only internal scroll region. Below that minimum, let the main area scroll naturally without compressing controls.
+Keep the header and footer at the viewport edges on supported desktop and mobile sizes. The start screen balances its file drop area with concise workflow and retention information. After a file is chosen, align its name, replacement action, model, and start control in one toolbar. During processing, keep the original player and a compact status panel visible together. After success, place the original media on the left and a wider transcript workspace on the right at desktop sizes; stack the media above the transcript on mobile. Keep the page within one viewport and make the transcript list the only scroll region in every completed state. Verify the layout at 1440×1000, 1280×720, and 390×844.
 
-Use 4px spacing increments. Panels use 16px corners and a restrained shadow. The transcript panel uses internal scrolling at the supported desktop-fit size; below that size, the page scrolls naturally.
+Use 4px spacing increments. Panels use 16px corners and a restrained shadow. The transcript panel uses internal scrolling at desktop and mobile sizes. Keep editing and save controls in view while transcript rows scroll.
 
 ## Interaction details
 

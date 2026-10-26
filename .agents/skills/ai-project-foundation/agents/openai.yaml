@@ -1,0 +1,4 @@
+interface:
+  display_name: "AI Project Foundation"
+  short_description: "Create Markdown guidance and AI review skills"
+  default_prompt: "Use $ai-project-foundation in setup mode to inspect project source, write AGENTS.md rules and a CLAUDE.md bridge containing only @AGENTS.md, and create PRODUCT.md, CONTEXT.md, DESIGN.md, and SECURITY.md with evidence and explicit unknowns. Install and checklist all five complete bundled project skills, verify inventories/routes/discovery, preserve unrelated skills/settings, add no Foundation-owned checker/helper script, and configure no hook during setup."

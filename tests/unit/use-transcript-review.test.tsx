@@ -97,6 +97,27 @@ describe("useTranscriptReview", () => {
     ]);
   });
 
+  it("discards the active edit and every staged draft without changing saved transcript", () => {
+    const { result } = renderHook(() => useTranscriptReview(JOB_ID, transcript));
+    act(() => result.current.beginEdit(1));
+    act(() => result.current.updateActiveText("staged first"));
+    act(() => result.current.stageActiveEdit());
+    act(() => result.current.beginEdit(2));
+    act(() => result.current.updateActiveText("temporary second"));
+
+    expect(result.current.stagedCount).toBe(1);
+    expect(result.current.isDirty).toBe(true);
+    act(() => result.current.discardChanges());
+
+    expect(result.current.activeEdit).toBeNull();
+    expect(result.current.stagedCount).toBe(0);
+    expect(result.current.isDirty).toBe(false);
+    expect(result.current.transcript?.segments.map(({ id, text }) => ({ id, text }))).toEqual([
+      { id: 1, text: "first" },
+      { id: 2, text: "second" },
+    ]);
+  });
+
   it("clears an active draft when it is staged back to the saved text", () => {
     const { result } = renderHook(() => useTranscriptReview(JOB_ID, transcript));
     act(() => result.current.beginEdit(1));

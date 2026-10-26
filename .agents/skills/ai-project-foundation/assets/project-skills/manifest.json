@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 1,
+  "standardSkillCount": 5,
+  "installerSkill": {
+    "name": "ai-project-foundation",
+    "countedAsProjectSkill": false
+  },
+  "projectInstallRoot": ".agents/skills",
+  "skills": [
+    {
+      "name": "test-engineering",
+      "assetPath": "test-engineering",
+      "expectedFileCount": 2,
+      "invocationPolicy": "On behavior changes and test authoring",
+      "requiredResources": [
+        "SKILL.md",
+        "references/testing-contract.md"
+      ]
+    },
+    {
+      "name": "security-review",
+      "assetPath": "security-review",
+      "expectedFileCount": 2,
+      "invocationPolicy": "On application-code, dependency, security-configuration, executable-configuration, or CI changes",
+      "requiredResources": [
+        "SKILL.md",
+        "references/review-contract.md"
+      ]
+    },
+    {
+      "name": "graphify",
+      "assetPath": "graphify",
+      "expectedFileCount": 12,
+      "invocationPolicy": "Use for codebase/content discovery when relevant; CLI availability is separate",
+      "source": "https://github.com/Graphify-Labs/graphify/tree/v0.9.80/graphify",
+      "sourceRevision": "6478eb71237c86ee5fb6a35c702835e987ca445d",
+      "sourceInventorySha256": "0e7ad58d3f17009522b4701411038fc19df8ccf6c817035a867fc85c67ae4690",
+      "bundleInventorySha256": "aab00021382bf9fa662577f3db7605d38269edc8aa9f690d80a47176cd34ccd7",
+      "sourceLayout": "SKILL.md maps from graphify/skill-codex.md; eight references map from graphify/skills/codex/references/; license notices map from repository root.",
+      "inventoryHashBasis": "Canonical Git-published LF bytes; .gitattributes pins line endings for the bundled Graphify package.",
+      "approvedAdaptations": [
+        {
+          "path": "SKILL.md",
+          "reason": "Change implicit pip/uv installation into a read-only CLI availability check, including the existing-graph fast path, so using the bundled skill cannot install an executable without an explicit request."
+        },
+        {
+          "path": "references/hooks.md",
+          "reason": "Require explicit host/scope/event/behavior for Git hook changes and prevent the native Claude integration from violating the one-line CLAUDE.md bridge."
+        },
+        {
+          "path": "references/query.md",
+          "reason": "Make inline graph traversal independent of stale interpreter metadata and gate graph-state writes/refresh commands on an already-installed Graphify CLI."
+        }
+      ],
+      "licenseFiles": [
+        "LICENSE",
+        "LICENSE-MIT",
+        "NOTICE"
+      ],
+      "requiredResources": [
+        "SKILL.md",
+        "references/add-watch.md",
+        "references/exports.md",
+        "references/extraction-spec.md",
+        "references/github-and-merge.md",
+        "references/hooks.md",
+        "references/query.md",
+        "references/transcribe.md",
+        "references/update.md",
+        "LICENSE",
+        "LICENSE-MIT",
+        "NOTICE"
+      ]
+    },
+    {
+      "name": "hook-management",
+      "assetPath": "hook-management",
+      "expectedFileCount": 2,
+      "invocationPolicy": "Only when the user requests hook inspection, configuration, migration, or removal",
+      "requiredResources": [
+        "SKILL.md",
+        "references/hook-change-contract.md"
+      ]
+    },
+    {
+      "name": "impeccable",
+      "assetPath": "impeccable",
+      "expectedFileCount": 64,
+      "sourceFileCount": 62,
+      "invocationPolicy": "For UI design work; do not run the launcher when its engine binary is absent unless the user explicitly requests the engine; route hook changes through hook-management after confirming host, scope, event, and behavior",
+      "source": "https://github.com/pbakaus/impeccable/tree/skill-v4.7.0/.agents/skills/impeccable",
+      "sourceRevision": "aeeb3d8c30b5f95aeeb3e893b0f1a308af8fdb8f",
+      "sourceInventorySha256": "8c66e37af0112aa6d9f12b05104dfc587d13b49f12950e4b7c21f65bd3edef50",
+      "bundleInventorySha256": "dc55eb3bcfc827aaa51f06bdda6bd88e21f6a75eaee261039095e98057c39cd0",
+      "sourceLayout": "Full .agents/skills/impeccable tree from the pinned upstream commit; root LICENSE and NOTICE.md copied into the skill folder.",
+      "inventoryHashBasis": "Canonical Git-published LF bytes; .gitattributes pins line endings for the complete package.",
+      "licenseFiles": [
+        "LICENSE",
+        "NOTICE.md"
+      ],
+      "upstreamJavaScriptSupportFiles": [
+        "scripts/live-browser-dom.js",
+        "scripts/live-browser-ignores.js",
+        "scripts/live-browser-session.js",
+        "scripts/live-browser.js",
+        "scripts/modern-screenshot.umd.js"
+      ],
+      "approvedAdaptations": [],
+      "requiredResources": [
+        "SKILL.md",
+        "agents/openai.yaml",
+        "reference/craft-floor.md",
+        "reference/hooks.md",
+        "reference/new-work.md",
+        "LICENSE",
+        "NOTICE.md"
+      ],
+      "packageResourcePolicy": "Inventory all 64 files and resolve every local link; read the entrypoint and route metadata, then load playbook references by task. Preserve every upstream file."
+    }
+  ]
+}
