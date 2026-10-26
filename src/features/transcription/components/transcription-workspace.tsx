@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import Link from "next/link";
 import { Button, buttonClassName } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
@@ -40,6 +40,19 @@ function ServiceNotice({ serviceState, onRetry, showChecking = true }: { service
 }
 
 type SucceededSession = Extract<WorkspaceSession, { kind: "succeeded" }>;
+type ActiveSession = Extract<WorkspaceSession, { kind: "submitting" | "queued" | "running" }>;
+
+function WorkspaceBody({ primary, reference, status }: { primary: ReactNode; reference: ReactNode; status?: ReactNode }) {
+  return (
+    <div className="workspace-body flex min-h-0 flex-1 flex-col gap-3 desktop-fit:overflow-hidden">
+      {status}
+      <div className="workspace-grid grid min-h-0 flex-1 grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] desktop-fit:overflow-hidden">
+        {primary}
+        {reference}
+      </div>
+    </div>
+  );
+}
 
 function DownloadActions({ jobId, disabled }: { jobId: SucceededSession["jobId"]; disabled: boolean }) {
   return (
@@ -94,40 +107,44 @@ function SucceededWorkspace({
   }, [review.isDirty, review.isSaving]);
 
   return (
-    <>
-      <div className="workspace-main flex min-h-0 min-w-0 flex-col gap-3">
-        <MediaPlayer
-          media={session}
-          playerRef={playerRef}
-          currentTime={currentTime}
-          onTimeChange={onTimeChange}
-          onSeeking={onSeeking}
-          onDuration={(seconds) => onDuration(session.url, seconds)}
-        />
-        <p className="m-0 text-xs text-success" role="status">ถอดเสียงเสร็จแล้ว · {session.transcript.segments.length} ช่วง{review.isDirty ? " · มีการแก้ไขที่ยังไม่ได้บันทึก" : ""}</p>
-      </div>
-      <aside className="workspace-side flex min-h-0 min-w-0 flex-col">
-        <TranscriptPanel
-          transcript={review.transcript ?? session.transcript}
-          currentTime={currentTime}
-          isOriginal={review.isOriginal}
-          isDirty={review.isDirty}
-          isSaving={review.isSaving}
-          saveState={review.saveState}
-          originalState={review.originalState}
-          activeEdit={review.activeEdit}
-          downloadActions={<DownloadActions jobId={session.jobId} disabled={review.isDirty || review.isSaving} />}
-          onReplay={onReplay}
-          onBeginEdit={review.beginEdit}
-          onEdit={review.updateActiveText}
-          onStageEdit={review.stageActiveEdit}
-          onCancelEdit={review.cancelActiveEdit}
-          onViewOriginal={() => void review.viewOriginal()}
-          onViewLatest={review.viewLatest}
-          onSave={() => void review.saveChanges()}
-        />
-      </aside>
-    </>
+    <WorkspaceBody
+      status={<p className="m-0 text-xs text-success" role="status">ถอดเสียงเสร็จแล้ว · {session.transcript.segments.length} ช่วง{review.isDirty ? " · มีการแก้ไขที่ยังไม่ได้บันทึก" : ""}</p>}
+      primary={
+        <aside className="workspace-side flex min-h-0 min-w-0 flex-col">
+          <TranscriptPanel
+            transcript={review.transcript ?? session.transcript}
+            currentTime={currentTime}
+            isOriginal={review.isOriginal}
+            isDirty={review.isDirty}
+            isSaving={review.isSaving}
+            saveState={review.saveState}
+            originalState={review.originalState}
+            activeEdit={review.activeEdit}
+            downloadActions={<DownloadActions jobId={session.jobId} disabled={review.isDirty || review.isSaving} />}
+            onReplay={onReplay}
+            onBeginEdit={review.beginEdit}
+            onEdit={review.updateActiveText}
+            onStageEdit={review.stageActiveEdit}
+            onCancelEdit={review.cancelActiveEdit}
+            onViewOriginal={() => void review.viewOriginal()}
+            onViewLatest={review.viewLatest}
+            onSave={() => void review.saveChanges()}
+          />
+        </aside>
+      }
+      reference={
+        <div className="workspace-main flex min-h-0 min-w-0 flex-col gap-3">
+          <MediaPlayer
+            media={session}
+            playerRef={playerRef}
+            currentTime={currentTime}
+            onTimeChange={onTimeChange}
+            onSeeking={onSeeking}
+            onDuration={(seconds) => onDuration(session.url, seconds)}
+          />
+        </div>
+      }
+    />
   );
 }
 
@@ -157,9 +174,9 @@ function GuidePanel() {
   );
 }
 
-function ProgressPanel({ session, jobMessage }: { session: WorkspaceSession; jobMessage: string | null }) {
+function ProgressStrip({ session, jobMessage }: { session: ActiveSession; jobMessage: string | null }) {
   const isUploading = session.kind === "submitting";
-  const progress = isUploading ? session.uploadPercent : session.kind === "queued" || session.kind === "running" ? session.progressPercent : 0;
+  const progress = isUploading ? session.uploadPercent : session.progressPercent;
   const label = isUploading
     ? "กำลังส่งไฟล์ไปยัง service"
     : session.kind === "queued"
@@ -167,14 +184,16 @@ function ProgressPanel({ session, jobMessage }: { session: WorkspaceSession; job
       : "กำลังถอดเสียง";
 
   return (
-    <section className="progress-panel flex flex-1 flex-col justify-center rounded-xl border border-coordinate-soft bg-white p-4 sm:p-5" aria-live="polite">
-      <p className="m-0 mt-1 text-sm text-ink-muted">{isUploading ? "ส่งไฟล์แล้ว service จะเริ่มเข้าคิวถอดเสียง" : "โปรดรอสักครู่ ระบบกำลังถอดเสียงจากไฟล์ของคุณ"}</p>
-      <div className="progress-label mt-6 flex items-center justify-between gap-3 text-sm text-ink">
-        <h2 className="m-0 text-lg font-semibold text-ink">{label}</h2>
-        <span className="font-mono tabular-nums text-accent">{progress}%</span>
+    <section className="progress-panel grid shrink-0 gap-2 rounded-xl border border-coordinate-soft bg-white p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-x-5 sm:px-4" aria-live="polite">
+      <div className="min-w-0">
+        <div className="progress-label flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-sm text-ink sm:justify-start">
+          <h2 className="m-0 text-base font-semibold text-ink">{label}</h2>
+          <span className="font-mono tabular-nums text-accent">{progress}%</span>
+        </div>
+        <p className="m-0 mt-0.5 text-xs leading-relaxed text-ink-muted">{isUploading ? "ส่งไฟล์แล้ว service จะเริ่มเข้าคิวถอดเสียง" : jobMessage ?? "โปรดรอสักครู่ ระบบกำลังถอดเสียงจากไฟล์ของคุณ"}</p>
       </div>
       <div
-        className="mt-2 h-2 w-full overflow-hidden rounded-full bg-accent-soft"
+        className="h-2 w-full overflow-hidden rounded-full bg-accent-soft sm:col-span-2"
         role="progressbar"
         aria-valuemin={0}
         aria-valuemax={100}
@@ -183,13 +202,6 @@ function ProgressPanel({ session, jobMessage }: { session: WorkspaceSession; job
       >
         <span className="block h-full rounded-full bg-accent transition-[width] duration-300 motion-reduce:transition-none" style={{ width: progress + "%" }} />
       </div>
-      <p className="m-0 mt-2 text-xs leading-relaxed text-ink-muted">{isUploading ? "อัปโหลดไฟล์ผ่านการเชื่อมต่อในเครื่อง" : jobMessage ?? "หน้านี้ติดตามงานหนึ่งรายการ หากปิดแท็บจะไม่สามารถกลับมาติดตามจากเว็บได้"}</p>
-      <ol className="mt-5 grid gap-3 border-t border-line pt-4 text-xs text-ink-muted">
-        <li className="flex items-center gap-3"><span className="grid size-6 place-items-center rounded-full bg-accent text-white">✓</span><span>ตรวจสอบและเตรียมไฟล์</span></li>
-        <li className="flex items-center gap-3 text-accent"><span className="grid size-6 place-items-center rounded-full border-2 border-accent bg-accent-soft">●</span><span>ประมวลผลเสียง</span></li>
-        <li className="flex items-center gap-3"><span className="size-6 rounded-full border border-coordinate-soft bg-white" /><span>จัดรูปแบบผลลัพธ์</span></li>
-      </ol>
-      <RetentionNote className="mt-5" />
     </section>
   );
 }
@@ -218,7 +230,6 @@ export function TranscriptionWorkspace() {
   } = useTranscriptionSession();
   const selectedMediaUrl = session.kind === "selected" ? session.url : null;
   const isHome = media === null;
-  const isActive = session.kind === "submitting" || session.kind === "queued" || session.kind === "running";
 
   useEffect(() => {
     if (!selectedMediaUrl) return;
@@ -316,27 +327,24 @@ export function TranscriptionWorkspace() {
         </div>
       ) : (
         <div className="workspace-content flex min-h-0 flex-1 flex-col gap-3 py-3 sm:gap-4 sm:py-4 desktop-fit:overflow-hidden">
-          <section className="panel source-panel flex shrink-0 flex-col overflow-hidden rounded-2xl bg-surface shadow-[0_8px_26px_rgb(32_60_90_/_7%)]" aria-labelledby="source-title">
-            <div className="panel-heading flex min-h-14 items-center justify-between gap-3 border-b border-line px-4 py-3 sm:px-5">
-              <div className="flex min-w-0 items-center gap-3">
+          <section className="panel source-panel shrink-0 overflow-hidden rounded-2xl bg-surface shadow-[0_8px_26px_rgb(32_60_90_/_7%)]" aria-labelledby="source-title">
+            <div className="selected-toolbar flex min-w-0 flex-wrap items-center gap-3 border-b border-line px-3 py-3 sm:px-4">
+              <div className="source-summary flex min-w-0 flex-1 basis-full items-center gap-3 sm:basis-[240px]">
                 <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-accent-soft text-accent" aria-hidden="true">
                   <svg className="size-5" viewBox="0 0 24 24" fill="none"><path d="M7 3.75h7l4.25 4.5v12H7zM14 3.75v4.5h4.25" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" /></svg>
                 </span>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <h2 id="source-title" ref={sourceTitleRef} tabIndex={-1} className="m-0 truncate text-sm font-semibold text-ink">{media.file.name}</h2>
-                  <p className="panel-meta m-0 text-xs text-ink-muted">{formatMediaType(media.file)} · {formatFileSize(media.file.size)} · {media.durationSeconds === null ? "กำลังอ่านความยาว" : "ความยาว " + Math.floor(media.durationSeconds / 60) + ":" + String(Math.floor(media.durationSeconds % 60)).padStart(2, "0")}</p>
+                  <p className="panel-meta m-0 truncate text-xs text-ink-muted">{formatMediaType(media.file)} · {formatFileSize(media.file.size)} · {media.durationSeconds === null ? "กำลังอ่านความยาว" : "ความยาว " + Math.floor(media.durationSeconds / 60) + ":" + String(Math.floor(media.durationSeconds % 60)).padStart(2, "0")}</p>
                 </div>
               </div>
               {(session.kind === "selected" || session.kind === "failed" || session.kind === "succeeded") ? (
-                <Button className="min-h-9 shrink-0 px-2 text-xs" variant="text" type="button" onClick={() => { replayWindowRef.current = null; clearSession(); setCurrentTime(0); }}>เลือกไฟล์ใหม่</Button>
+                <Button className="min-h-9 shrink-0 px-2 text-xs" variant="text" type="button" onClick={() => { replayWindowRef.current = null; clearSession(); setCurrentTime(0); }}>{session.kind === "selected" ? "ล้างไฟล์" : "เลือกไฟล์ใหม่"}</Button>
               ) : null}
-            </div>
-            <div className="px-3 pt-2 sm:px-4">
               <FileDrop compact disabled={session.kind !== "selected"} error={selectionError} onSelect={handleSelectFile} onInvalid={setSelectionError} />
-            </div>
-            {session.kind === "selected" ? (
-              <div className="grid gap-x-4 gap-y-2 px-3 pb-3 pt-2 sm:grid-cols-[minmax(0,1fr)_minmax(160px,220px)_auto] sm:items-center sm:px-4">
-                <div className="model-field grid gap-1.5 sm:col-start-2 sm:row-start-1">
+              {session.kind === "selected" ? (
+                <>
+                <div className="model-field grid min-w-0 flex-1 basis-[160px] gap-1.5 sm:flex-none sm:basis-auto sm:w-[180px]">
                   <label className="text-xs font-semibold text-ink" htmlFor="whisper-model">โมเดลถอดเสียง</label>
                   <Select
                     id="whisper-model"
@@ -353,28 +361,35 @@ export function TranscriptionWorkspace() {
                     <option value="large-v3">large-v3</option>
                   </Select>
                 </div>
-                <Button ref={startButtonRef} className="start-button sm:col-start-3 sm:row-start-1 sm:self-end" variant="primary" type="button" onClick={() => void startTranscription()} disabled={serviceState !== "ready" || selectedModel === null || (media.durationSeconds !== null && media.durationSeconds > MAX_FILE_DURATION_SECONDS)}>
-                  เริ่มถอดเสียง <span aria-hidden="true">→</span>
+                <Button ref={startButtonRef} className="start-button min-w-36 flex-1 sm:flex-none" variant="primary" type="button" onClick={() => void startTranscription()} disabled={serviceState !== "ready" || selectedModel === null || (media.durationSeconds !== null && media.durationSeconds > MAX_FILE_DURATION_SECONDS)}>
+                  เริ่มถอดเสียง <svg className="size-4" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 </Button>
-              </div>
-            ) : null}
+                </>
+              ) : null}
+            </div>
             <ServiceNotice serviceState={serviceState} onRetry={() => void checkService()} />
           </section>
 
-          <div className="workspace-grid grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] sm:gap-4 desktop-fit:overflow-hidden">
-            {session.kind === "succeeded" ? (
-              <SucceededWorkspace
-                key={session.jobId}
-                session={session}
-                currentTime={currentTime}
-                playerRef={playerRef}
-                onTimeChange={handleTimeChange}
-                onSeeking={handleSeeking}
-                onDuration={updateDuration}
-                onReplay={replaySegment}
-              />
-            ) : (
-              <>
+          {session.kind === "succeeded" ? (
+            <SucceededWorkspace
+              key={session.jobId}
+              session={session}
+              currentTime={currentTime}
+              playerRef={playerRef}
+              onTimeChange={handleTimeChange}
+              onSeeking={handleSeeking}
+              onDuration={updateDuration}
+              onReplay={replaySegment}
+            />
+          ) : (
+            <WorkspaceBody
+              status={session.kind === "submitting" || session.kind === "queued" || session.kind === "running" ? <ProgressStrip session={session} jobMessage={jobMessage} /> : null}
+              primary={
+                <aside className="workspace-side flex min-h-0 min-w-0 flex-col">
+                  <GuidePanel />
+                </aside>
+              }
+              reference={
                 <div className="workspace-main flex min-h-0 min-w-0 flex-col gap-3">
                   <MediaPlayer key={media.url} media={media} playerRef={playerRef} currentTime={currentTime} onTimeChange={handleTimeChange} onSeeking={handleSeeking} onDuration={(seconds) => updateDuration(media.url, seconds)} />
                   {session.kind === "failed" || jobMessage ? (
@@ -385,12 +400,9 @@ export function TranscriptionWorkspace() {
                     </div>
                   ) : null}
                 </div>
-                <aside className="workspace-side flex min-h-0 min-w-0 flex-col">
-                  {isActive ? <ProgressPanel session={session} jobMessage={jobMessage} /> : <GuidePanel />}
-                </aside>
-              </>
-            )}
-          </div>
+              }
+            />
+          )}
         </div>
       )}
 

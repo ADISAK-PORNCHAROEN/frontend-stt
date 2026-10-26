@@ -218,7 +218,7 @@ export function TranscriptPanel({
                   <span className={"coordinate-line my-0.5 w-px bg-coordinate-soft " + (isActive ? "bg-accent" : "")} />
                   <span className={"coordinate-point absolute top-5 size-2 rounded-full border border-white bg-coordinate " + (isActive ? "size-2.5 bg-accent ring-2 ring-blue-100" : "")} />
                 </div>
-                <div className={"segment-content grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-2 rounded-lg border border-transparent p-1.5 " + (isActive ? "bg-accent-soft shadow-[inset_3px_0_0_var(--accent)]" : "")}>
+                <div className={"segment-content grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-2 rounded-lg border border-transparent p-1.5 " + (isActive ? "bg-accent-soft" : "")}>
                   {activeEdit?.segmentId === segment.id ? (
                     <div className="col-span-2 grid min-w-0 gap-2">
                       <div className="grid min-w-0 grid-cols-[60px_minmax(0,1fr)] items-start gap-2">

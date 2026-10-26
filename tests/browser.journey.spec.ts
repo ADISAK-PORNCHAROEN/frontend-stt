@@ -196,7 +196,11 @@ test("#3 gives Thai recovery for service, queue, invalid-media, expired-job, and
   stt.reset({ kind: "ready" });
   await page.goto(app.origin);
   const choose = async () => page.locator('input[type="file"]').setInputFiles(silentWav({ durationSeconds: 1 }));
-  const clear = async () => page.getByRole("button", { name: "เลือกไฟล์ใหม่" }).click();
+  const clear = async () => {
+    const removeButton = page.getByRole("button", { name: "ล้างไฟล์" });
+    if (await removeButton.count()) await removeButton.click();
+    else await page.getByRole("button", { name: "เลือกไฟล์ใหม่" }).click();
+  };
 
   await choose();
   await expect(page.getByRole("button", { name: "เริ่มถอดเสียง" })).toBeEnabled();
@@ -270,7 +274,8 @@ test("#4 reviews, seeks, follows, and exports the transcript on desktop and mobi
   expect(mediaBox).not.toBeNull();
   expect(transcriptBox).not.toBeNull();
   expect(Math.abs((mediaBox?.y ?? 0) - (transcriptBox?.y ?? 0))).toBeLessThan(2);
-  expect((mediaBox?.x ?? 0) + (mediaBox?.width ?? 0)).toBeLessThan(transcriptBox?.x ?? 0);
+  expect((transcriptBox?.x ?? 0) + (transcriptBox?.width ?? 0)).toBeLessThan(mediaBox?.x ?? 0);
+  expect(transcriptBox?.width ?? 0).toBeGreaterThan((mediaBox?.width ?? 0) * 1.75);
   await page.screenshot({ path: testInfo.outputPath("issue-4-completed-desktop.png"), fullPage: true });
 
   const secondSegment = segmentButtons.nth(1);
@@ -304,7 +309,7 @@ test("#4 reviews, seeks, follows, and exports the transcript on desktop and mobi
   });
   const lastSegment = segmentButtons.nth(13);
   await expect(lastSegment).toHaveAttribute("aria-current", "true");
-  await expect.poll(() => transcript.locator(".transcript-list").evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  await expect.poll(() => transcript.locator(".transcript-list").evaluate((element) => element.scrollTop)).toBeGreaterThan(120);
 
   const transcriptList = transcript.locator(".transcript-list");
   const listBox = await transcriptList.boundingBox();
@@ -364,7 +369,7 @@ test("#4 reviews, seeks, follows, and exports the transcript on desktop and mobi
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
   const mobileMediaBox = await page.locator(".media-panel").boundingBox();
   const mobileTranscriptBox = await transcript.boundingBox();
-  expect((mobileMediaBox?.y ?? 0) + (mobileMediaBox?.height ?? 0)).toBeLessThan(mobileTranscriptBox?.y ?? 0);
+  expect((mobileTranscriptBox?.y ?? 0) + (mobileTranscriptBox?.height ?? 0)).toBeLessThan(mobileMediaBox?.y ?? 0);
   expect(await transcript.locator(".transcript-list").evaluate((element) => getComputedStyle(element).overflowY)).toBe("visible");
   await lastSegment.click();
   await expect(lastSegment).toHaveAttribute("aria-current", "true");

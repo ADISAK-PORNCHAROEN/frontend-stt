@@ -54,7 +54,7 @@ async function attachStateScreenshot(
 }
 
 for (const viewport of viewports) {
-  test(`captures the four passing workspace states at ${viewport.name} size`, async ({ page, app, stt }, testInfo) => {
+  test(`captures the five passing workspace states at ${viewport.name} size`, async ({ page, app, stt }, testInfo) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     stt.reset({ kind: "ready" });
     await page.goto(app.origin);
@@ -64,6 +64,22 @@ for (const viewport of viewports) {
 
     stt.reset({ kind: "job", outcome: "success" });
     await page.locator('input[type="file"]').setInputFiles(silentWav({ durationSeconds: 1 }));
+    const toolbar = page.locator(".selected-toolbar");
+    await expect(toolbar).toBeVisible();
+    await expect(toolbar.locator("#whisper-model")).toBeVisible();
+    await expect(toolbar.getByRole("button", { name: "เริ่มถอดเสียง" })).toBeVisible();
+    await expect(toolbar.locator("#file-help, .drop-footnote, .drop-size")).toHaveCount(0);
+    if (viewport.name !== "mobile") {
+      const controls = await Promise.all([
+        toolbar.locator(".source-summary"),
+        toolbar.locator(".file-drop"),
+        toolbar.locator(".model-field"),
+        toolbar.getByRole("button", { name: "เริ่มถอดเสียง" }),
+      ].map(async (locator) => locator.boundingBox()));
+      const centerYs = controls.map((box) => (box?.y ?? 0) + (box?.height ?? 0) / 2);
+      expect(Math.max(...centerYs) - Math.min(...centerYs)).toBeLessThan(12);
+    }
+    await attachStateScreenshot(page, testInfo, "selected", viewport.name);
     await page.getByRole("button", { name: "เริ่มถอดเสียง" }).click();
     await expect(page.getByText("อยู่ในคิวถอดเสียง", { exact: true })).toBeVisible();
     stt.advance();
@@ -74,6 +90,23 @@ for (const viewport of viewports) {
     stt.advance();
     const transcript = page.getByRole("region", { name: "บทถอดเสียง" });
     await expect(transcript).toBeVisible();
+    const successStatus = page.getByText(/ถอดเสียงเสร็จแล้ว/);
+    await expect(successStatus).toBeVisible();
+    const media = page.locator(".media-panel");
+    const transcriptBox = await transcript.boundingBox();
+    const mediaBox = await media.boundingBox();
+    const successStatusBox = await successStatus.boundingBox();
+    expect(transcriptBox).not.toBeNull();
+    expect(mediaBox).not.toBeNull();
+    expect(successStatusBox).not.toBeNull();
+    expect((successStatusBox?.y ?? Infinity) + (successStatusBox?.height ?? 0)).toBeLessThan(transcriptBox?.y ?? -1);
+    if (viewport.name === "mobile") {
+      expect((transcriptBox?.y ?? 0) + (transcriptBox?.height ?? 0)).toBeLessThan(mediaBox?.y ?? 0);
+    } else {
+      expect(Math.abs((transcriptBox?.y ?? 0) - (mediaBox?.y ?? 0))).toBeLessThan(2);
+      expect((transcriptBox?.x ?? 0) + (transcriptBox?.width ?? 0)).toBeLessThan(mediaBox?.x ?? 0);
+      expect(transcriptBox?.width ?? 0).toBeGreaterThan((mediaBox?.width ?? 0) * 1.75);
+    }
     const transcriptList = transcript.locator(".transcript-list");
     if (viewport.name === "mobile") {
       expect(await transcriptList.evaluate((element) => getComputedStyle(element).overflowY)).toBe("visible");
