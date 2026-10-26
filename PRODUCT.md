@@ -43,7 +43,7 @@ The frontend follows one transcription job at a time. The service keeps successf
 
 ## Evidence on Hand
 
-- Existing frontend source: `src/app/page.tsx`, `src/app/layout.tsx`, and `src/app/globals.css`.
+- Existing frontend source: `src/app/page.tsx`, `src/app/layout.tsx`, and `src/app/tailwind.css`.
 - Existing STT service: the `stt-services` project; its API contract and operational constraints are described in `docs/API.md`, `docs/SCHEMA.md`, and `docs/SECURITY-MODEL.md`.
 - No approved product name, logo, testimonials, or other brand assets have been supplied. Do not invent them.
 

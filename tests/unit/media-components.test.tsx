@@ -52,7 +52,7 @@ describe("FileDrop", () => {
     const { container, rerender } = render(<FileDrop disabled={false} error="previous error" onSelect={vi.fn()} onInvalid={onInvalid} />);
     expect(container.querySelector(".file-drop")).toHaveClass("has-error");
     expect(screen.getByRole("status")).toHaveTextContent("previous error");
-    const input = screen.getByLabelText("เรียกดูไฟล์");
+    const input = screen.getByLabelText("เลือกไฟล์");
     fireEvent.change(input, { target: { files: [makeFile("unsupported.mov", "video/quicktime")] } });
     expect(onInvalid).toHaveBeenCalledWith(expect.stringContaining("รูปแบบไฟล์นี้ยังไม่รองรับ"));
 
@@ -63,7 +63,7 @@ describe("FileDrop", () => {
     expect(onInvalid).toHaveBeenLastCalledWith("ไฟล์มีขนาดเกิน 1 GiB กรุณาเลือกไฟล์ที่เล็กกว่านี้");
 
     rerender(<FileDrop disabled={false} error={null} onSelect={vi.fn()} onInvalid={onInvalid} />);
-    fireEvent.change(screen.getByLabelText("เรียกดูไฟล์"), { target: { files: [] } });
+    fireEvent.change(screen.getByLabelText("เลือกไฟล์"), { target: { files: [] } });
     expect(onInvalid).toHaveBeenCalledTimes(2);
   });
 
@@ -73,7 +73,7 @@ describe("FileDrop", () => {
     const drop = container.querySelector(".file-drop");
     if (!drop) throw new Error("File drop surface not rendered");
     fireEvent.dragEnter(drop);
-    fireEvent.change(screen.getByLabelText("เรียกดูไฟล์"), { target: { files: [makeFile("clip.wav")] } });
+    fireEvent.change(screen.getByLabelText("เลือกไฟล์"), { target: { files: [makeFile("clip.wav")] } });
     fireEvent.drop(drop, { dataTransfer: { files: [makeFile("clip.wav")] } });
     expect(drop).not.toHaveClass("is-dragging");
     expect(onSelect).not.toHaveBeenCalled();

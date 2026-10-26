@@ -22,11 +22,13 @@ function panelProps(overrides: Partial<Parameters<typeof TranscriptPanel>[0]> = 
     saveState: { kind: "idle" },
     originalState: { kind: "unloaded" },
     activeEdit: null,
+    stagedCount: 0,
     onReplay: vi.fn(),
     onBeginEdit: vi.fn(),
     onEdit: vi.fn(),
     onStageEdit: vi.fn(),
     onCancelEdit: vi.fn(),
+    onDiscardChanges: vi.fn(),
     onViewOriginal: vi.fn(),
     onViewLatest: vi.fn(),
     onSave: vi.fn(),
@@ -66,8 +68,10 @@ describe("TranscriptPanel", () => {
     rerender(<TranscriptPanel {...editedProps} />);
     const editor = screen.getByRole("textbox", { name: "แก้ไขข้อความช่วงเวลา 00:00.0" });
     expect(editor).toHaveValue("draft");
+    expect(screen.getByRole("list", { name: "ช่วงของบทถอดเสียง" })).not.toContainElement(editor);
+    expect(screen.getByRole("button", { name: "ยกเลิกทั้งหมด" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "แก้ไขข้อความช่วงเวลา 00:02.0" })).toBeDisabled();
-    const replayButton = screen.getByRole("button", { name: "เล่นช่วงเวลา 00:00.0" });
+    const replayButton = screen.getByRole("button", { name: /เล่นช่วงเวลา 00:00.0/ });
     expect(replayButton).toHaveAttribute("aria-current", "true");
     fireEvent.click(replayButton);
     expect(editedProps.onReplay).toHaveBeenCalledWith(transcript.segments[0]);
@@ -80,8 +84,18 @@ describe("TranscriptPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "แก้ไขข้อความช่วงเวลา 00:00.0" }));
     const canceledProps = panelProps({ activeEdit: { segmentId: 1, text: "draft again" }, isDirty: true });
     rerender(<TranscriptPanel {...canceledProps} />);
-    fireEvent.click(screen.getByRole("button", { name: "ยกเลิก" }));
+    fireEvent.click(screen.getByRole("button", { name: "ยกเลิกช่วงนี้" }));
     expect(canceledProps.onCancelEdit).toHaveBeenCalledOnce();
+  });
+
+  it("offers batch save and discard for staged edits", () => {
+    const props = panelProps({ isDirty: true, stagedCount: 2 });
+    render(<TranscriptPanel {...props} />);
+    expect(screen.getByText(/2 ช่วงที่เก็บแล้ว/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "ยกเลิกทั้งหมด" }));
+    expect(props.onDiscardChanges).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: "บันทึกทั้งหมด" }));
+    expect(props.onSave).toHaveBeenCalledOnce();
   });
 
   it("shows dirty, saving, saved, and failure states with the right controls", () => {
@@ -92,7 +106,7 @@ describe("TranscriptPanel", () => {
       originalState: { kind: "failed", message: "original failed" },
     });
     const { unmount } = render(<TranscriptPanel {...props} />);
-    expect(screen.getByRole("status")).toHaveTextContent("ยังไม่ได้บันทึก");
+    expect(screen.getByText(/มีการแก้ไขที่ยังไม่ได้บันทึก/)).toHaveClass("unsaved-note");
     expect(screen.getAllByRole("alert").map((alert) => alert.textContent)).toEqual(["save failed", "original failed"]);
     expect(screen.getByText("original failed")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "กำลังบันทึก" })).toBeDisabled();
@@ -101,7 +115,7 @@ describe("TranscriptPanel", () => {
 
     unmount();
     const savedView = render(<TranscriptPanel {...panelProps({ saveState: { kind: "saved" } })} />);
-    expect(screen.getByRole("status")).toHaveTextContent("บันทึกแล้ว");
+    expect(screen.getByText(/บันทึกแล้ว · ไฟล์ดาวน์โหลดใช้ฉบับล่าสุด/)).toHaveClass("review-saved-note");
     savedView.unmount();
   });
 
@@ -217,7 +231,7 @@ describe("TranscriptPanel", () => {
   it("shows the empty transcript state without rows", () => {
     const emptyTranscript: Transcript = { durationSeconds: 0, segments: [], text: "" };
     render(<TranscriptPanel {...panelProps({ transcript: emptyTranscript, currentTime: 1 })} />);
-    expect(screen.getByRole("status")).toHaveTextContent("ไม่พบคำพูดในไฟล์นี้");
+    expect(screen.getByText("ไม่พบคำพูดในไฟล์นี้")).toBeInTheDocument();
     expect(screen.queryByRole("list", { name: "ช่วงของบทถอดเสียง" })).not.toBeInTheDocument();
   });
 });

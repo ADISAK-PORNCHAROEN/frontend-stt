@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TranscriptionWorkspace } from "@/features/transcription/components/transcription-workspace";
 import { isJobId, type JobId, type Transcript, type WorkspaceSession } from "@/features/transcription/types";
@@ -63,10 +63,12 @@ function reviewState(overrides: Record<string, unknown> = {}) {
     saveState: { kind: "idle" },
     originalState: { kind: "unloaded" },
     activeEdit: null,
+    stagedCount: 0,
     beginEdit: vi.fn(),
     updateActiveText: vi.fn(),
     stageActiveEdit: vi.fn(),
     cancelActiveEdit: vi.fn(),
+    discardChanges: vi.fn(),
     viewOriginal: vi.fn(),
     viewLatest: vi.fn(),
     saveChanges: vi.fn(),
@@ -89,9 +91,9 @@ describe("TranscriptionWorkspace", () => {
     mocks.useTranscriptionSession.mockReturnValue(state);
     const { rerender } = render(<TranscriptionWorkspace />);
     expect(screen.getByRole("heading", { name: /ฟังทุกช่วงเวลา.*อ่านทุกถ้อยคำ/ })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "แผนที่การฟัง" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "เริ่มจากไฟล์ แล้วฟังกลับตามเวลา" })).toBeInTheDocument();
     expect(screen.getByText("กำลังตรวจการเชื่อมต่อ STT service")).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("เรียกดูไฟล์"), { target: { files: [new File(["home"], "home.mp3", { type: "audio/mpeg" })] } });
+    fireEvent.change(screen.getByLabelText("เลือกไฟล์"), { target: { files: [new File(["home"], "home.mp3", { type: "audio/mpeg" })] } });
     expect(state.selectFile).toHaveBeenCalledWith(expect.objectContaining({ name: "home.mp3" }));
 
     const unavailable = sessionState({ serviceState: "unavailable" });
@@ -157,16 +159,18 @@ describe("TranscriptionWorkspace", () => {
       const workspaceBody = document.querySelector(".workspace-body");
       const progressPanel = document.querySelector(".progress-panel");
       expect(progressPanel).not.toBeNull();
-      expect(progressPanel?.parentElement).toBe(workspaceBody);
       const workspaceGrid = workspaceBody?.querySelector(".workspace-grid");
+      expect(progressPanel?.parentElement).toBe(workspaceGrid);
       expect(workspaceGrid).not.toBeNull();
       if (!workspaceGrid || !progressPanel) throw new Error("Workspace progress layout not rendered");
-      expect(workspaceGrid.compareDocumentPosition(progressPanel) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+      const mediaPanel = workspaceGrid.querySelector(".media-panel");
+      if (!mediaPanel) throw new Error("Workspace media panel not rendered");
+      expect(mediaPanel.compareDocumentPosition(progressPanel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", String(index === 0 ? 35 : index === 1 ? 0 : 47));
-      expect(progressPanel?.querySelector("ol")).toBeNull();
-      if (index === 0) expect(document.querySelector(".progress-panel")).toHaveTextContent("กำลังส่งไฟล์ไปยัง service");
-      if (index === 1) expect(document.querySelector(".progress-label h2")).toHaveTextContent("อยู่ในคิวถอดเสียง");
-      if (index === 2) expect(screen.getByText("กำลังถอดเสียง", { exact: true }).parentElement).toHaveTextContent("47%");
+      expect(progressPanel?.querySelectorAll("ol li")).toHaveLength(3);
+      if (index === 0) expect(document.querySelector(".progress-panel")).toHaveTextContent("กำลังส่งไฟล์");
+      if (index === 1) expect(document.querySelector("#progress-title")).toHaveTextContent("อยู่ในคิวถอดเสียง");
+      if (index === 2) expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "47");
       if (index === 2) expect(document.querySelector(".progress-panel")).toHaveTextContent("กำลังรอการตอบกลับ");
       view.unmount();
     }
@@ -184,8 +188,7 @@ describe("TranscriptionWorkspace", () => {
 
     mocks.useTranscriptionSession.mockReturnValue(sessionState({ session: selectedSession(), media: selectedSession(), jobMessage: "cannot poll" }));
     render(<TranscriptionWorkspace />);
-    expect(screen.getByRole("alert")).toHaveTextContent("cannot poll");
-    expect(screen.getByText("เลือกไฟล์ใหม่เพื่อส่งงานอีกครั้ง")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("cannot poll เลือกไฟล์ใหม่เพื่อส่งงานอีกครั้ง");
   });
 
   it("plays bounded transcript ranges and stops playback when a range ends", () => {
@@ -223,11 +226,10 @@ describe("TranscriptionWorkspace", () => {
     mocks.useTranscriptReview.mockReturnValue(cleanReview);
     const view = render(<TranscriptionWorkspace />);
     const workspaceGrid = document.querySelector(".workspace-grid");
-    expect(Array.from(workspaceGrid?.children ?? []).map((element) => element.className.split(" ")[0])).toEqual(["workspace-side", "workspace-main"]);
+    expect(Array.from(workspaceGrid?.children ?? []).map((element) => element.className.split(" ")[0])).toEqual(["workspace-main", "workspace-side"]);
     expect(screen.getByRole("link", { name: "ดาวน์โหลด TXT" })).toHaveAttribute("href", `/api/stt/jobs/${JOB_ID}/result?format=txt`);
-    const successStatus = screen.getByText(/ถอดเสียงเสร็จแล้ว/);
-    expect(successStatus.parentElement).toHaveClass("workspace-body");
-    expect(successStatus.nextElementSibling).toHaveClass("workspace-grid");
+    const transcriptPanel = screen.getByRole("region", { name: "บทถอดเสียง" });
+    expect(within(transcriptPanel).getByText(/ถอดเสียงเสร็จแล้ว/)).toBeInTheDocument();
     expect(mocks.useTranscriptReview).toHaveBeenCalledWith(JOB_ID, transcript);
     const succeededAudio = screen.getByLabelText("เล่นไฟล์เสียง sample.wav");
     Object.defineProperty(succeededAudio, "duration", { configurable: true, value: 28 });
@@ -243,7 +245,7 @@ describe("TranscriptionWorkspace", () => {
     const stagedReview = reviewState({ isDirty: true });
     mocks.useTranscriptReview.mockReturnValue(stagedReview);
     view.rerender(<TranscriptionWorkspace />);
-    fireEvent.click(screen.getByRole("button", { name: "บันทึกการแก้ไข" }));
+    fireEvent.click(screen.getByRole("button", { name: "บันทึกทั้งหมด" }));
     expect(stagedReview.saveChanges).toHaveBeenCalledOnce();
     view.unmount();
 

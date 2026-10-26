@@ -6,12 +6,12 @@
 
 **Blocked by:** [#3](https://github.com/ADISAK-PORNCHAROEN/frontend-stt/issues/3): Submit one file and follow its transcription job.
 
-**Status:** ready-for-agent
+**Status:** complete
 
-- [ ] The workspace retrieves the successful JSON result and shows the browser-held original media beside its timestamped transcript segments.
-- [ ] Selecting a segment timestamp seeks to and plays the matching media position; the active segment is highlighted and followed during playback.
-- [ ] Transcript text remains read-only; TXT and SRT exports download from the same-origin result endpoint.
-- [ ] The coordinate rail and tabular timestamps follow Clear Timeline; the player and transcript sit side by side on desktop and stack with natural scrolling on mobile.
-- [ ] API integration coverage verifies JSON, TXT, and SRT result behavior and unavailable-result errors against a controllable local service; browser coverage verifies seek, active-segment follow, and downloads using a successful-result fixture.
-- [ ] Visual review covers the completed state at desktop and mobile widths, including long Thai transcript lines, keyboard focus, and readable timestamps.
+- [x] The workspace retrieves the successful JSON result and shows the browser-held original media beside its timestamped transcript segments.
+- [x] Selecting a segment timestamp seeks to and plays the matching media position; the active segment is highlighted and followed during playback.
+- [x] Transcript text remains read-only; TXT and SRT exports download from the same-origin result endpoint.
+- [x] The coordinate rail and tabular timestamps follow Clear Timeline; the player and transcript sit side by side on desktop and stack with natural scrolling on mobile.
+- [x] API integration coverage verifies JSON, TXT, and SRT result behavior and unavailable-result errors against a controllable local service; browser coverage verifies seek, active-segment follow, and downloads using a successful-result fixture.
+- [x] Visual review covers the completed state at desktop and mobile widths, including long Thai transcript lines, keyboard focus, and readable timestamps.
 

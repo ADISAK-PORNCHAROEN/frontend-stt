@@ -31,6 +31,7 @@ export function useTranscriptReview(jobId: JobId | null, initialTranscript: Tran
 
   const isSaving = saveState.kind === "saving";
   const hasStagedChanges = savedTranscript?.segments.some((segment) => stagedTexts[segment.id] !== undefined) ?? false;
+  const stagedCount = Object.keys(stagedTexts).length;
   const activeSavedText = activeEdit && savedTranscript?.segments.find((segment) => segment.id === activeEdit.segmentId)?.text;
   const activeBaseText = activeEdit ? stagedTexts[activeEdit.segmentId] ?? activeSavedText : undefined;
   const isDirty = hasStagedChanges || (activeEdit !== null && activeEdit.text !== activeBaseText);
@@ -81,6 +82,13 @@ export function useTranscriptReview(jobId: JobId | null, initialTranscript: Tran
     if (!activeEdit || isSaving) return;
     setActiveEdit(null);
   }, [activeEdit, isSaving]);
+
+  const discardChanges = useCallback(() => {
+    if (isSaving) return;
+    setStagedTexts({});
+    setActiveEdit(null);
+    setSaveState({ kind: "idle" });
+  }, [isSaving]);
 
   const viewOriginal = useCallback(async () => {
     if (!jobId || !savedTranscript) return;
@@ -138,10 +146,12 @@ export function useTranscriptReview(jobId: JobId | null, initialTranscript: Tran
     saveState,
     originalState,
     activeEdit,
+    stagedCount,
     beginEdit,
     updateActiveText,
     stageActiveEdit,
     cancelActiveEdit,
+    discardChanges,
     viewOriginal,
     viewLatest,
     saveChanges,

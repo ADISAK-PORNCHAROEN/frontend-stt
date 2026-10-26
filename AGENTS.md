@@ -1,41 +1,45 @@
 # frontend-stt Agent Guide
 
-This repository is a Next.js App Router application in TypeScript with Tailwind CSS. It implements a Thai-language, local-first transcription workspace; accepted product behavior is documented in `docs/agents/current-task.md` and `docs/specs/`.
+This repository is a Next.js App Router application in TypeScript with Tailwind CSS. It implements a Thai-language, local-first transcription workspace; `PRODUCT.md` owns accepted behavior and `docs/agents/current-task.md` records active work.
 
 ## Working agreements
 
 - Preserve the installed stack and file layout shown by package.json, package-lock.json, and the source. The app currently lives under src/app.
 - Use `develop` as the primary working and integration branch. Start project tasks and features from `develop`; use `main` only when the user explicitly requests it or for a release flow.
-- Do not infer product requirements from the repository name, parent folder, or starter template. Use accepted user requirements; record unresolved product decisions without inventing them.
+- Use accepted requirements in `PRODUCT.md` and `docs/agents/current-task.md`; record unresolved decisions without inventing them.
 - For Next.js changes, first read the relevant installed guide under node_modules/next/dist/docs/ from this repository. Follow the version-matched docs and heed deprecations.
 - Keep shared instructions here. Keep product acceptance, design, architecture, testing, and security detail in their linked owner documents.
 - Route every application-code, dependency, CI, or executable-configuration diff through both local skills: .agents/skills/test-engineering/SKILL.md and .agents/skills/security-review/SKILL.md.
 - Use existing package scripts as task-appropriate checks. Do not claim tests, type checks, CI, or coverage ran unless an actual configured command was run.
+- Work from `develop`; update verified acceptance boxes in the matching GitHub issue and close a leaf issue only when its full agreed scope and required verification are complete. Keep parent/spec issues open. This project does not use GitHub Actions.
 - Preserve the Next.js agent-rules block. next.config.ts enables experimental.agentFeedback; do not change that option unless requested, and let the installed Next.js version manage its feedback block.
 - Keep credentials, private user data, and production data out of Git and review reports.
-- Keep AI workflow setup project-local. If a project skill instructs writing to a user or global configuration path (including `setup-pstack`'s default model settings path), do not write there unless the user explicitly requests that scope; use a project-local option only when the skill supports one.
-- In this project, pstack skills read `.agents/pstack-models.md` for role models and effort guidance. Keep that configuration inside the repository.
+- Keep AI workflow setup project-local. Do not change global skills or settings. PStack roles read `.agents/pstack-models.md`; keep model routing in this repository.
+- Preserve existing project and upstream skills, Impeccable state, and callbacks. Before using a routed skill, check its row in `docs/agents/skills-checklist.md` and follow the invocation policy in its `SKILL.md`; report incomplete package gaps accurately.
+- Route UI design through `.agents/skills/impeccable/SKILL.md`. Preserve `.impeccable/` state and detector callbacks; hook changes require an explicit request and the project-local `hook-management` workflow.
+- Do not add GitHub Actions, CI, hooks, dependencies, or workflow scripts unless the user requests that capability.
 
 ## Find the source
 
-- Start from src/app/page.tsx for the root route and src/app/layout.tsx for the root layout and metadata.
-- Check src/app/globals.css for global styles and next.config.ts for framework configuration.
-- Use targeted source search with rg. No project code graph or source inventory tool is configured; verify all findings against current files.
-- Read docs/ARCHITECTURE.md for boundaries and docs/agents/current-task.md for current acceptance status.
+- Start at `src/app/page.tsx` and `src/app/layout.tsx`; interactive transcription code lives under `src/features/transcription/`.
+- Trace same-origin STT routes in `src/app/api/stt/` through `src/lib/stt-service/proxy.ts`; the browser API adapter is `src/features/transcription/api.ts`.
+- Check `src/app/tailwind.css` and `next.config.ts` for Tailwind theme tokens and framework configuration. Use the project-local Graphify skill for broader code/content discovery when useful; its CLI is not installed, and source findings must be verified against files.
+- Read `PRODUCT.md`, `DESIGN.md`, `docs/ARCHITECTURE.md`, `docs/SECURITY-MODEL.md`, and `docs/agents/current-task.md` for accepted scope and current status.
 
 ## Read by task
 
 | Task | Read first |
 | --- | --- |
-| Product behavior | docs/agents/current-task.md for the accepted application behavior |
-| UI work | DESIGN.md and project-local `.agents/skills/impeccable/SKILL.md` when the skills checklist marks it installed; if missing, report that local gap instead of relying on a global copy |
-| Architecture or Next.js changes | docs/ARCHITECTURE.md and the relevant installed-version guide under node_modules/next/dist/docs/ |
-| Tests or behavior changes | docs/TESTING.md and .agents/skills/test-engineering/SKILL.md |
-| Every code or executable change | .agents/skills/test-engineering/SKILL.md and .agents/skills/security-review/SKILL.md |
-| Security-sensitive work | SECURITY.md, docs/SECURITY-MODEL.md, and .agents/skills/security-review/SKILL.md |
-| Other specialized workflows | docs/agents/tools.md for the project skill catalog; follow the matching `.agents/skills/<name>/SKILL.md` trigger and invocation policy |
-| Workflow maintenance | docs/agents/tools.md, docs/agents/document-delivery.md, and docs/agents/foundation.json |
-| Feature planning | Use accepted requirements and `docs/agents/current-task.md`. When the user selects a spec or ticket workflow, use the matching host `$to-spec` or `$to-tickets` skill only if it is available and allowed by its invocation policy; do not create external tickets without authorization. |
+| Product behavior | `PRODUCT.md`, then `docs/agents/current-task.md` for active work |
+| UI work | `DESIGN.md`, the selected surface brief under `.impeccable/surfaces/`, and `.agents/skills/impeccable/SKILL.md`; check package status in the checklist |
+| Architecture or Next.js changes | `docs/ARCHITECTURE.md` and the relevant installed-version guide under `node_modules/next/dist/docs/` |
+| Tests or behavior changes | `docs/TESTING.md` and `.agents/skills/test-engineering/SKILL.md` |
+| Every code or executable change | `.agents/skills/test-engineering/SKILL.md` and `.agents/skills/security-review/SKILL.md` |
+| Security-sensitive work | `SECURITY.md`, `docs/SECURITY-MODEL.md`, and `.agents/skills/security-review/SKILL.md`; use the host Codex Security diff skill when available |
+| Hook requests | `.agents/skills/hook-management/SKILL.md` and its contract; invoke only on an explicit hook request |
+| Other specialized workflows | `docs/agents/tools.md`; follow the matching `.agents/skills/<name>/SKILL.md` trigger and invocation policy |
+| Feature planning | Use `docs/agents/issue-tracker.md` and the project-local `$to-spec` or `$to-tickets` skill only when the user selects that workflow; both skills are explicit-only |
+| Workflow maintenance | `$ai-project-foundation`, `docs/agents/document-delivery.md`, `docs/agents/skills-checklist.md`, and `docs/agents/foundation.json` |
 
 ## Completion
 

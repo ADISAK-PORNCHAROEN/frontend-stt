@@ -11,17 +11,18 @@ Before choosing test layers, interpreting coverage or reviewing test edits, read
 
 ## Workflow
 
-1. Establish the accepted behavior and inspect the relevant source and callers before editing. Use user requirements; the current starter page is not product acceptance.
+1. Establish the accepted behavior in `PRODUCT.md` and `docs/agents/current-task.md`, then inspect the relevant source and callers before editing.
 2. Add or update a regression test for each production behavior change at the narrowest layer that proves the contract. Include boundary, invalid-input, permission, exceptional, or recovery cases when the changed behavior creates those risks.
 3. Choose unit tests for local logic, integration tests for interacting boundaries, and E2E for changed critical user journeys. Do not claim a layer passed when it was skipped or is not configured.
-4. Use actual commands from package.json. Inspect changed production coverage only if coverage becomes configured or the task requires a measurement. Preserve any established threshold; none is currently defined.
+4. Use actual commands from package.json. When changed behavior touches the transcription feature, preserve the configured V8 thresholds of at least 90% line/function and 80% branch coverage for executable feature source.
 5. Review test diffs for deleted cases, weakened assertions, mocks that replace the behavior under test, and expectations copied from the implementation. Keep prior failures separate from regressions.
 
 ## Project execution and recovery
 
 - Repository root: the directory containing package.json.
-- npm run lint runs ESLint; npm run build runs next build. They are available commands, not unconditional gates established by this setup.
-- There is no configured test, typecheck, coverage, E2E, or CI command. If a task needs one, report the missing runner and select a suitable follow-up with the project owner; do not add scripts or dependencies without a separate request.
+- `npm run test:unit` runs Vitest and Testing Library; `npm run test:api` runs same-origin API integration in Playwright against the controlled fixture; `npm run test:e2e` runs browser journeys and visual states in Microsoft Edge; `npm run test:coverage` measures V8 coverage; and `npm run test:all` runs those layers in sequence.
+- `npm run lint` runs ESLint, `npx tsc --noEmit` runs TypeScript, and `npm run build` runs the installed Next.js production build. Select checks according to the changed behavior and project instructions.
+- Playwright reports and coverage output are local and ignored. No GitHub Actions or CI workflow is configured. Do not add scripts, dependencies, hooks, or CI without a separate request.
 - For Next.js behavior or framework errors, read the installed guide/error page under node_modules/next/dist/docs/ before applying a fix.
 
 ## Completion

@@ -10,11 +10,12 @@ type Props = {
   disabled: boolean;
   error: string | null;
   compact?: boolean;
+  compactLabel?: string;
   onSelect: (file: File) => void;
   onInvalid: (message: string) => void;
 };
 
-export function FileDrop({ disabled, error, compact = false, onSelect, onInvalid }: Props) {
+export function FileDrop({ disabled, error, compact = false, compactLabel = "เปลี่ยนไฟล์", onSelect, onInvalid }: Props) {
   const [dragging, setDragging] = useState(false);
   const describedBy = compact
     ? error ? "file-error" : undefined
@@ -89,16 +90,15 @@ export function FileDrop({ disabled, error, compact = false, onSelect, onInvalid
           <div className="drop-copy min-w-0">
             <h2 className="m-0 text-sm font-semibold text-ink sm:text-base">เลือกไฟล์เสียงหรือวิดีโอ</h2>
             <p id="file-help" className="mb-0 mt-1 text-xs leading-relaxed text-ink-muted sm:text-sm">รองรับ MP3, M4A, WAV, FLAC และ MP4 ที่มีเสียง · ไม่เกิน 1 GiB · ยาวไม่เกิน 2 ชั่วโมง</p>
-            <p className="drop-retention mb-0 mt-1 text-xs leading-relaxed text-accent">ไฟล์และผลถอดเสียงจัดเก็บชั่วคราวโดย service ตามช่วงเวลาที่แจ้งด้านล่าง</p>
+            <p className="drop-instruction mb-0 mt-1 text-xs leading-relaxed text-ink-muted">หรือลากไฟล์มาวางที่นี่</p>
           </div>
         </>
       ) : null}
       <label className={buttonClassName(compact ? "secondary" : "primary", "file-button whitespace-nowrap " + (disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer")) + (compact ? " min-h-10 px-3 text-xs" : " col-span-2 w-full sm:col-span-1 sm:col-start-3 sm:row-start-1 sm:w-auto")} htmlFor="media-file">
-        {compact ? "เปลี่ยนไฟล์" : "เรียกดูไฟล์"}
+        {compact ? compactLabel : "เลือกไฟล์"}
       </label>
       {!compact ? (
         <>
-          <p className="drop-footnote m-0 hidden text-xs text-ink-muted sm:col-start-2 sm:row-start-2 sm:block">หรือวางไฟล์ที่นี่</p>
           <p className="drop-size m-0 hidden text-right font-mono text-xs tabular-nums text-accent sm:col-start-3 sm:row-start-2 sm:block">ขนาดไฟล์สูงสุด {formatFileSize(MAX_FILE_BYTES)}</p>
         </>
       ) : null}

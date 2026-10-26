@@ -19,7 +19,7 @@ Before selecting risks, verification requirements, or abuse cases, read [securit
 
 ## Project boundaries and recovery
 
-The current app is a fixed starter page with external links and a dependency/build boundary. It has no application login, sessions, authorization, persistence, API routes, server actions, uploads, or AI/tool execution. Reassess these limits when source changes. Keep findings local under SECURITY.md unless the owner authorizes another destination.
+This is a single-user, loopback-only transcription workspace. Review local media upload at `src/app/api/stt/` and the fixed loopback adapter in `src/lib/stt-service/proxy.ts`; the browser API client and playback/transcript UI live under `src/features/transcription/`. The app has no account, authentication, database, transcript archive, or durable browser state. The STT service and its responses are separate trust boundaries. Reassess these limits when source or accepted product scope changes. Keep findings local under `SECURITY.md` unless the owner authorizes another destination.
 
 ## Completion
 

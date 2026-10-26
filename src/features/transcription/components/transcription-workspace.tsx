@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Button, buttonClassName } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
@@ -14,9 +14,9 @@ import { MediaPlayer } from "./media-player";
 import { TranscriptPanel } from "./transcript-panel";
 
 const HOME_STEPS = [
-  { marker: "A", title: "เลือกไฟล์", description: "เสียงหรือวิดีโอ" },
-  { marker: "B", title: "เริ่มถอดเสียง", description: "ติดตามสถานะที่นี่" },
-  { marker: "C", title: "ฟังตามช่วง", description: "กดเวลาเพื่อเล่นซ้ำ" },
+  { marker: "1", title: "เลือกไฟล์", description: "เสียงหรือวิดีโอที่ต้องการถอดเสียง" },
+  { marker: "2", title: "เลือกโมเดลแล้วเริ่ม", description: "ติดตามสถานะงานในหน้านี้" },
+  { marker: "3", title: "ตรวจทานผล", description: "ฟังตามเวลา แก้ไข แล้วบันทึก" },
 ] as const;
 
 function ServiceNotice({ serviceState, onRetry, showChecking = true }: { serviceState: ServiceState; onRetry: () => void; showChecking?: boolean }) {
@@ -42,11 +42,16 @@ function ServiceNotice({ serviceState, onRetry, showChecking = true }: { service
 type SucceededSession = Extract<WorkspaceSession, { kind: "succeeded" }>;
 type ActiveSession = Extract<WorkspaceSession, { kind: "submitting" | "queued" | "running" }>;
 
-function WorkspaceBody({ primary, reference, status }: { primary: ReactNode; reference: ReactNode; status?: ReactNode }) {
+type WorkspaceLayout = "work" | "review";
+
+function WorkspaceBody({ primary, reference, layout = "work" }: { primary: ReactNode; reference: ReactNode; layout?: WorkspaceLayout }) {
+  const gridLayout = layout === "review"
+    ? "grid-rows-[minmax(0,0.7fr)_minmax(0,1.3fr)] items-stretch lg:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)] lg:grid-rows-1"
+    : "grid-rows-[minmax(0,1fr)_auto] items-stretch lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] lg:grid-rows-1";
+
   return (
-    <div className="workspace-body flex min-h-0 flex-1 flex-col gap-3 desktop-fit:overflow-hidden">
-      {status}
-      <div className="workspace-grid grid min-h-0 flex-1 grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] desktop-fit:overflow-hidden">
+    <div className="workspace-body flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
+      <div className={"workspace-grid grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden sm:gap-4 " + gridLayout}>
         {primary}
         {reference}
       </div>
@@ -61,8 +66,8 @@ function DownloadActions({ jobId, disabled }: { jobId: SucceededSession["jobId"]
         const label = "ดาวน์โหลด " + format.toUpperCase();
         const href = "/api/stt/jobs/" + jobId + "/result?format=" + format;
         return disabled
-          ? <Button className="min-h-9 px-2.5 text-[11px]" variant="secondary" type="button" key={format} disabled>{label}</Button>
-          : <a className={buttonClassName("secondary", "min-h-9 px-2.5 text-[11px] no-underline")} href={href} key={format}>{label}</a>;
+          ? <Button aria-label={label} className="min-h-9 px-3 text-xs uppercase" variant="secondary" type="button" key={format} disabled>{format}</Button>
+          : <a aria-label={label} className={buttonClassName("secondary", "min-h-9 px-3 text-xs uppercase no-underline")} href={href} key={format}>{format}</a>;
       })}
     </div>
   );
@@ -72,7 +77,7 @@ function RetentionNote({ className = "" }: { className?: string }) {
   return (
     <div className={"retention-note border-t border-line pt-3 " + className}>
       <h3 className="m-0 text-xs font-semibold text-accent">การจัดเก็บชั่วคราว</h3>
-      <p className="m-0 mt-1 text-xs leading-relaxed text-ink-muted">งานสำเร็จ: service ลบไฟล์ต้นฉบับหลัง 24 ชั่วโมง และเก็บผล 7 วัน งานล้มเหลว: ลบข้อมูลหลัง 24 ชั่วโมง</p>
+      <p className="m-0 mt-1 text-xs leading-relaxed text-ink-muted">งานสำเร็จเก็บไฟล์ต้นฉบับ 24 ชั่วโมงและเก็บผล 7 วัน · งานล้มเหลวลบข้อมูลหลัง 24 ชั่วโมง</p>
     </div>
   );
 }
@@ -80,18 +85,10 @@ function RetentionNote({ className = "" }: { className?: string }) {
 function SucceededWorkspace({
   session,
   currentTime,
-  playerRef,
-  onTimeChange,
-  onSeeking,
-  onDuration,
   onReplay,
 }: {
   session: SucceededSession;
   currentTime: number;
-  playerRef: RefObject<HTMLMediaElement | null>;
-  onTimeChange: (seconds: number) => void;
-  onSeeking: () => void;
-  onDuration: (mediaUrl: string, seconds: number) => void;
   onReplay: (segment: TranscriptSegment) => void;
 }) {
   const review = useTranscriptReview(session.jobId, session.transcript);
@@ -107,101 +104,122 @@ function SucceededWorkspace({
   }, [review.isDirty, review.isSaving]);
 
   return (
-    <WorkspaceBody
-      status={<p className="m-0 text-xs text-success" role="status">ถอดเสียงเสร็จแล้ว · {session.transcript.segments.length} ช่วง{review.isDirty ? " · มีการแก้ไขที่ยังไม่ได้บันทึก" : ""}</p>}
-      primary={
-        <aside className="workspace-side flex min-h-0 min-w-0 flex-col">
-          <TranscriptPanel
-            transcript={review.transcript ?? session.transcript}
-            currentTime={currentTime}
-            isOriginal={review.isOriginal}
-            isDirty={review.isDirty}
-            isSaving={review.isSaving}
-            saveState={review.saveState}
-            originalState={review.originalState}
-            activeEdit={review.activeEdit}
-            downloadActions={<DownloadActions jobId={session.jobId} disabled={review.isDirty || review.isSaving} />}
-            onReplay={onReplay}
-            onBeginEdit={review.beginEdit}
-            onEdit={review.updateActiveText}
-            onStageEdit={review.stageActiveEdit}
-            onCancelEdit={review.cancelActiveEdit}
-            onViewOriginal={() => void review.viewOriginal()}
-            onViewLatest={review.viewLatest}
-            onSave={() => void review.saveChanges()}
-          />
-        </aside>
-      }
-      reference={
-        <div className="workspace-main flex min-h-0 min-w-0 flex-col gap-3">
-          <MediaPlayer
-            media={session}
-            playerRef={playerRef}
-            currentTime={currentTime}
-            onTimeChange={onTimeChange}
-            onSeeking={onSeeking}
-            onDuration={(seconds) => onDuration(session.url, seconds)}
-          />
-        </div>
-      }
-    />
+    <aside className="workspace-side flex min-h-0 min-w-0 flex-col">
+      <TranscriptPanel
+        transcript={review.transcript ?? session.transcript}
+        currentTime={currentTime}
+        isOriginal={review.isOriginal}
+        isDirty={review.isDirty}
+        isSaving={review.isSaving}
+        saveState={review.saveState}
+        originalState={review.originalState}
+        activeEdit={review.activeEdit}
+        downloadActions={<DownloadActions jobId={session.jobId} disabled={review.isDirty || review.isSaving} />}
+        onReplay={onReplay}
+        onBeginEdit={review.beginEdit}
+        onEdit={review.updateActiveText}
+        onStageEdit={review.stageActiveEdit}
+        onCancelEdit={review.cancelActiveEdit}
+        onDiscardChanges={review.discardChanges}
+        onViewOriginal={() => void review.viewOriginal()}
+        onViewLatest={review.viewLatest}
+        onSave={() => void review.saveChanges()}
+        stagedCount={review.stagedCount}
+      />
+    </aside>
   );
 }
 
-function GuidePanel() {
+function CheckMark() {
   return (
-    <section className="panel guide-panel flex min-h-0 flex-col overflow-hidden rounded-2xl bg-surface shadow-[0_8px_26px_rgb(32_60_90_/_7%)]" aria-labelledby="guide-title">
-      <div className="panel-heading flex min-h-14 items-center justify-between gap-3 border-b border-line px-4 py-3 sm:px-5">
-        <h2 id="guide-title" className="m-0 text-sm font-semibold text-ink sm:text-base">แผนที่การฟัง</h2>
-        <span className="panel-meta text-xs text-ink-muted">วิธีใช้งาน</span>
+    <svg className="size-4" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path d="m4.5 10.25 3.4 3.4 7.6-7.4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function ReadinessPanel({ jobMessage }: { jobMessage: string | null }) {
+  return (
+    <section className="panel readiness-panel flex h-fit min-w-0 flex-col gap-4 self-start rounded-2xl bg-surface p-4 shadow-[0_8px_26px_rgb(32_60_90_/_7%)] sm:gap-5 sm:p-5" aria-labelledby="readiness-title">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 id="readiness-title" className="m-0 text-base font-semibold text-ink sm:text-lg">พร้อมเริ่มถอดเสียง</h2>
+          <p className="m-0 mt-1 text-xs leading-relaxed text-ink-muted">ตรวจไฟล์และเลือกโมเดลก่อนเริ่ม</p>
+        </div>
+        <span className="inline-flex min-h-8 items-center gap-1.5 rounded-full bg-accent-soft px-3 text-xs font-semibold text-accent"><CheckMark />ไฟล์พร้อม</span>
       </div>
-      <ol className="guide-list m-0 grid list-none gap-2 px-4 py-3 sm:px-5">
-        <li className="relative grid min-h-12 grid-cols-[30px_minmax(0,1fr)] items-center gap-3">
-          <span className="guide-point grid size-7 place-items-center rounded-full border border-coordinate-soft bg-white font-mono text-xs text-accent">A</span>
-          <p className="m-0 flex flex-col"><strong className="text-sm font-semibold text-ink">เลือกไฟล์</strong><span className="text-xs text-ink-muted">MP3, M4A, WAV, FLAC หรือ MP4</span></p>
+      <ul className="m-0 grid list-none gap-3 border-y border-line py-3">
+        <li className="flex min-w-0 items-start gap-3">
+          <span className="grid size-7 shrink-0 place-items-center rounded-full bg-accent-soft text-accent"><CheckMark /></span>
+          <p className="m-0 min-w-0"><strong className="block text-sm font-semibold text-ink">รูปแบบไฟล์รองรับ</strong><span className="text-xs leading-relaxed text-ink-muted">MP3, M4A, WAV, FLAC หรือ MP4 ที่มีเสียง</span></p>
         </li>
-        <li className="relative grid min-h-12 grid-cols-[30px_minmax(0,1fr)] items-center gap-3">
-          <span className="guide-point grid size-7 place-items-center rounded-full border border-coordinate-soft bg-white font-mono text-xs text-accent">B</span>
-          <p className="m-0 flex flex-col"><strong className="text-sm font-semibold text-ink">เริ่มถอดเสียง</strong><span className="text-xs text-ink-muted">รอคิวและติดตามสถานะได้ที่นี่</span></p>
+        <li className="flex min-w-0 items-start gap-3">
+          <span className="grid size-7 shrink-0 place-items-center rounded-full bg-accent-soft text-accent"><CheckMark /></span>
+          <p className="m-0 min-w-0"><strong className="block text-sm font-semibold text-ink">ฟังไฟล์ต้นฉบับได้</strong><span className="text-xs leading-relaxed text-ink-muted">คลิกเวลาในบทถอดเสียงเพื่อกลับไปฟังช่วงนั้น</span></p>
         </li>
-        <li className="relative grid min-h-12 grid-cols-[30px_minmax(0,1fr)] items-center gap-3">
-          <span className="guide-point grid size-7 place-items-center rounded-full border border-coordinate-soft bg-white font-mono text-xs text-accent">C</span>
-          <p className="m-0 flex flex-col"><strong className="text-sm font-semibold text-ink">กลับไปฟังตามช่วง</strong><span className="text-xs text-ink-muted">กดเวลาในบทถอดเสียงเพื่อ seek</span></p>
-        </li>
-      </ol>
-      <RetentionNote className="mx-4 mt-auto px-0 py-3 sm:mx-5" />
+      </ul>
+      {jobMessage ? <p className="m-0 rounded-lg bg-danger-soft px-3 py-2 text-xs leading-relaxed text-danger" role="alert">เกิดปัญหาในการติดตามงาน: {jobMessage} เลือกไฟล์ใหม่เพื่อส่งงานอีกครั้ง</p> : null}
+      <RetentionNote className="px-0 pt-0" />
     </section>
   );
 }
 
-function ProgressStrip({ session, jobMessage }: { session: ActiveSession; jobMessage: string | null }) {
+function ProgressPanel({ session, jobMessage }: { session: ActiveSession; jobMessage: string | null }) {
   const isUploading = session.kind === "submitting";
   const progress = isUploading ? session.uploadPercent : session.progressPercent;
   const label = isUploading
-    ? "กำลังส่งไฟล์ไปยัง service"
+    ? "กำลังส่งไฟล์"
     : session.kind === "queued"
       ? "อยู่ในคิวถอดเสียง"
       : "กำลังถอดเสียง";
+  const steps = [
+    { label: "ส่งไฟล์", description: "นำสื่อเข้าสู่คิวงาน", active: isUploading, complete: !isUploading },
+    { label: "รอคิว", description: "รอ service เริ่มประมวลผล", active: session.kind === "queued", complete: session.kind === "running" },
+    { label: "ถอดเสียง", description: "สร้างผลลัพธ์ตามช่วงเวลา", active: session.kind === "running", complete: false },
+  ];
 
   return (
-    <section className="progress-panel grid shrink-0 gap-2 rounded-xl border border-coordinate-soft bg-white p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-x-5 sm:px-4" aria-live="polite">
-      <div className="min-w-0">
-        <div className="progress-label flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-sm text-ink sm:justify-start">
-          <h2 className="m-0 text-base font-semibold text-ink">{label}</h2>
-          <span className="font-mono tabular-nums text-accent">{progress}%</span>
+    <section className="panel progress-panel flex h-fit min-w-0 flex-col gap-3 self-start rounded-2xl bg-surface p-4 shadow-[0_8px_26px_rgb(32_60_90_/_7%)] sm:gap-4 sm:p-5" aria-live="polite" aria-labelledby="progress-title">
+      <div className="flex min-w-0 items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h2 id="progress-title" className="m-0 text-base font-semibold text-ink sm:text-lg">{label}</h2>
+          <p className="m-0 mt-1 text-xs leading-relaxed text-ink-muted">{isUploading ? "ส่งไฟล์แล้ว service จะเริ่มเข้าคิวถอดเสียง" : jobMessage ?? "ระบบกำลังประมวลผลไฟล์นี้"}</p>
         </div>
-        <p className="m-0 mt-0.5 text-xs leading-relaxed text-ink-muted">{isUploading ? "ส่งไฟล์แล้ว service จะเริ่มเข้าคิวถอดเสียง" : jobMessage ?? "โปรดรอสักครู่ ระบบกำลังถอดเสียงจากไฟล์ของคุณ"}</p>
+        <span className="shrink-0 font-mono text-lg font-semibold tabular-nums text-accent">{progress}%</span>
       </div>
-      <div
-        className="h-2 w-full overflow-hidden rounded-full bg-accent-soft sm:col-span-2"
+      <progress
+        className="h-2.5 w-full accent-accent"
         role="progressbar"
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={progress}
         aria-label={isUploading ? "ความคืบหน้าการส่งไฟล์" : "ความคืบหน้าการถอดเสียง"}
-      >
-        <span className="block h-full rounded-full bg-accent transition-[width] duration-300 motion-reduce:transition-none" style={{ width: progress + "%" }} />
-      </div>
+        value={progress}
+        max={100}
+      />
+      {jobMessage ? <p className="m-0 rounded-lg bg-danger-soft px-3 py-2 text-xs leading-relaxed text-danger" role="alert">เกิดปัญหาในการติดตามงาน: {jobMessage}</p> : null}
+      <ol className="m-0 grid list-none gap-2 border-t border-line pt-3 sm:gap-3">
+        {steps.map(({ label: stepLabel, description, active, complete }) => (
+          <li className="flex min-w-0 items-center gap-3" key={stepLabel}>
+            <span className={"grid size-7 shrink-0 place-items-center rounded-full border " + (active ? "border-accent bg-accent text-white" : complete ? "border-accent-soft bg-accent-soft text-accent" : "border-coordinate-soft bg-white text-ink-muted")} aria-hidden="true">
+              {complete ? <CheckMark /> : <span className="size-1.5 rounded-full bg-current" />}
+            </span>
+            <span className="min-w-0"><strong className={"block text-sm font-semibold " + (active ? "text-accent" : "text-ink")}>{stepLabel}</strong><span className="text-xs leading-relaxed text-ink-muted">{description}</span></span>
+          </li>
+        ))}
+      </ol>
+      <RetentionNote className="px-0 pt-3" />
+    </section>
+  );
+}
+
+function FailedPanel({ session, onRetry }: { session: Extract<WorkspaceSession, { kind: "failed" }>; onRetry: () => void }) {
+  return (
+    <section className="panel failed-panel flex min-w-0 flex-col items-start gap-3 rounded-2xl bg-surface p-4 shadow-[0_8px_26px_rgb(32_60_90_/_7%)] sm:p-5" aria-labelledby="failed-title" role="alert">
+      <h2 id="failed-title" className="m-0 text-base font-semibold text-danger sm:text-lg">ถอดเสียงไม่สำเร็จ</h2>
+      <p className="m-0 text-sm leading-relaxed text-ink">{session.message}</p>
+      <Button variant="secondary" type="button" onClick={onRetry}>ลองส่งไฟล์นี้อีกครั้ง</Button>
+      <RetentionNote className="mt-1 w-full px-0 pt-3" />
     </section>
   );
 }
@@ -230,6 +248,7 @@ export function TranscriptionWorkspace() {
   } = useTranscriptionSession();
   const selectedMediaUrl = session.kind === "selected" ? session.url : null;
   const isHome = media === null;
+  const canReplaceFile = session.kind === "selected" || session.kind === "failed" || session.kind === "succeeded";
 
   useEffect(() => {
     if (!selectedMediaUrl) return;
@@ -278,9 +297,9 @@ export function TranscriptionWorkspace() {
   }
 
   return (
-    <main className="site-shell mx-auto flex min-h-dvh w-full max-w-[1380px] flex-col px-4 md:px-8 desktop-fit:h-dvh desktop-fit:min-h-0 desktop-fit:overflow-hidden">
-      <header className="topbar flex min-h-16 shrink-0 items-center justify-between border-b border-line sm:min-h-[76px]">
-        <Link className="wordmark inline-flex items-center gap-2.5 text-xs font-bold tracking-[0.13em] text-ink no-underline sm:gap-3 sm:text-[13px]" href="/" aria-label="Time Atlas หน้าแรก">
+    <main className="site-shell mx-auto flex h-dvh min-h-0 w-full max-w-[1380px] flex-col overflow-hidden px-4 md:px-8">
+      <header className="topbar sticky top-0 z-20 flex min-h-14 shrink-0 items-center justify-between border-b border-line bg-canvas sm:min-h-[68px]">
+        <Link className="wordmark inline-flex items-center gap-2.5 rounded-sm text-xs font-bold tracking-[0.13em] text-ink no-underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent sm:gap-3 sm:text-sm" href="/" aria-label="Time Atlas หน้าแรก">
           <span className="wordmark-mark relative grid size-7 place-items-center rounded-lg bg-blue-100" aria-hidden="true">
             <i className="absolute size-[3px] -translate-y-[7px] rounded-full bg-accent" />
             <i className="absolute size-[3px] -translate-x-[7px] rounded-full bg-accent" />
@@ -291,45 +310,49 @@ export function TranscriptionWorkspace() {
       </header>
 
       {isHome ? (
-        <div className="workspace-content flex flex-1 flex-col gap-5 py-5 desktop-fit:min-h-0 desktop-fit:justify-start desktop-fit:gap-4 desktop-fit:py-3">
-          <section className="page-intro grid gap-5 desktop-fit:gap-4" aria-labelledby="page-title">
-            <div className="intro-copy">
-              <h1 id="page-title" className="m-0 max-w-[620px] text-[clamp(2rem,3.5vw,3rem)] font-semibold leading-[1.16] tracking-[-0.025em] text-ink">ฟังทุกช่วงเวลา<br /><span className="text-accent">อ่านทุกถ้อยคำ</span></h1>
-              <p className="m-0 mt-3 max-w-[60ch] text-sm leading-relaxed text-ink-muted sm:text-base">ถอดเสียงจากคลิปเสียงหรือวิดีโอ แล้วกลับไปฟังแต่ละช่วงได้ทันที</p>
-            </div>
-            <div className="home-uploader min-w-0">
-              <FileDrop disabled={false} error={selectionError} onSelect={handleSelectFile} onInvalid={setSelectionError} />
-              <ServiceNotice serviceState={serviceState} onRetry={() => void checkService()} />
-            </div>
-          </section>
+        <div className="workspace-content home-content flex min-h-0 flex-1 items-center py-4 sm:py-5">
+          <section className="home-screen grid min-h-0 w-full items-center gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(330px,0.8fr)] lg:gap-6" aria-label="เริ่มต้น">
+            <div className="home-main grid min-w-0 gap-4 sm:gap-5">
+              <div className="home-copy page-intro">
+                <h1 id="page-title" className="m-0 text-[clamp(2rem,3.6vw,3rem)] font-semibold leading-[1.16] tracking-[-0.025em] text-ink">ฟังทุกช่วงเวลา<span className="block text-accent">อ่านทุกถ้อยคำ</span></h1>
+                <p className="m-0 mt-3 max-w-[60ch] text-sm leading-relaxed text-ink-muted sm:text-base">เลือกไฟล์เสียงหรือวิดีโอ แล้วกลับไปฟังทุกช่วงจากบทถอดเสียงได้ทันที</p>
+              </div>
 
-          <section className="home-details grid gap-5 rounded-2xl bg-white p-5 shadow-[0_8px_26px_rgb(32_60_90_/_7%)] sm:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] sm:gap-6 sm:p-6" aria-label="วิธีใช้งานและการจัดเก็บ">
-            <div className="home-process min-w-0">
-              <h2 className="m-0 border-b border-line pb-3 text-base font-semibold text-ink">แผนที่การฟัง</h2>
-              <ol className="home-steps relative m-0 grid list-none gap-4 pt-4 sm:grid-cols-3 sm:gap-3">
+              <section className="home-uploader flex min-w-0 flex-col gap-3" aria-label="เลือกไฟล์เพื่อถอดเสียง">
+                <FileDrop disabled={false} error={selectionError} onSelect={handleSelectFile} onInvalid={setSelectionError} />
+                <ServiceNotice serviceState={serviceState} onRetry={() => void checkService()} />
+              </section>
+            </div>
+
+            <aside className="panel home-aside flex min-w-0 flex-col gap-4 rounded-2xl bg-surface p-4 shadow-[0_8px_26px_rgb(32_60_90_/_7%)] sm:gap-5 sm:p-6" aria-label="วิธีใช้งานและการจัดเก็บ">
+              <h2 className="m-0 text-base font-semibold text-ink sm:text-lg">เริ่มจากไฟล์ แล้วฟังกลับตามเวลา</h2>
+              <ol className="home-steps m-0 grid list-none gap-3">
                 {HOME_STEPS.map(({ marker, title, description }) => (
-                  <li key={marker} className="relative flex min-w-0 items-start gap-3 after:absolute after:bottom-[-16px] after:left-4 after:top-8 after:w-px after:bg-line after:content-[''] sm:flex-col sm:gap-2.5 sm:after:bottom-auto sm:after:left-8 sm:after:right-[-12px] sm:after:top-4 sm:after:h-px sm:after:w-auto last:after:hidden">
-                    <span className="relative z-10 grid size-8 shrink-0 place-items-center rounded-full border border-coordinate-soft bg-white font-mono text-xs text-accent">{marker}</span>
-                    <p className="m-0 flex flex-col"><strong className="text-sm font-semibold text-ink">{title}</strong><small className="text-xs leading-relaxed text-ink-muted">{description}</small></p>
+                  <li key={marker} className="flex min-w-0 items-start gap-3">
+                    <span className="grid size-8 shrink-0 place-items-center rounded-full border border-coordinate-soft bg-white font-mono text-xs tabular-nums text-accent">{marker}</span>
+                    <p className="m-0 min-w-0"><strong className="block text-sm font-semibold text-ink">{title}</strong><span className="text-xs leading-relaxed text-ink-muted">{description}</span></p>
                   </li>
                 ))}
               </ol>
-            </div>
-            <aside className="home-retention border-t border-line pt-4 sm:border-l sm:border-t-0 sm:pl-6 sm:pt-0" aria-labelledby="retention-title">
-              <h2 id="retention-title" className="m-0 text-sm font-semibold text-ink">การจัดเก็บชั่วคราว</h2>
-              <dl className="m-0 mt-3 grid grid-cols-2 gap-x-4 gap-y-3">
-                <div><dt className="text-xs text-ink-muted">ไฟล์ต้นฉบับ</dt><dd className="m-0 mt-0.5 text-sm font-semibold text-ink">24 ชั่วโมง</dd></div>
-                <div><dt className="text-xs text-ink-muted">ผลถอดเสียงเมื่อสำเร็จ</dt><dd className="m-0 mt-0.5 text-sm font-semibold text-ink">7 วัน</dd></div>
-              </dl>
-              <p className="m-0 mt-3 text-xs leading-relaxed text-ink-muted">งานล้มเหลวจะลบข้อมูลภายใน 24 ชั่วโมง เว็บไม่เก็บประวัติถาวร และปิดแท็บระหว่างถอดเสียงแล้วกลับมาติดตามงานเดิมไม่ได้</p>
+              <div className="home-retention border-t border-line pt-3">
+                <h3 className="m-0 text-xs font-semibold text-accent">การจัดเก็บชั่วคราว</h3>
+                <p className="m-0 mt-1 text-xs leading-relaxed text-ink-muted">เว็บไม่มีประวัติถาวร · งานสำเร็จเก็บไฟล์ต้นฉบับ 24 ชั่วโมงและผล 7 วัน · งานล้มเหลวเก็บข้อมูล 24 ชั่วโมง</p>
+              </div>
             </aside>
           </section>
         </div>
       ) : (
-        <div className="workspace-content flex min-h-0 flex-1 flex-col gap-3 py-3 sm:gap-4 sm:py-4 desktop-fit:overflow-hidden">
-          <section className="panel source-panel shrink-0 overflow-hidden rounded-2xl bg-surface shadow-[0_8px_26px_rgb(32_60_90_/_7%)]" aria-labelledby="source-title">
-            <div className="selected-toolbar flex min-w-0 flex-wrap items-center gap-3 border-b border-line px-3 py-3 sm:px-4">
-              <div className="source-summary flex min-w-0 flex-1 basis-full items-center gap-3 sm:basis-[240px]">
+        <div className="workspace-content flex min-h-0 flex-1 flex-col gap-2 overflow-hidden py-2 sm:gap-3 sm:py-3">
+          {session.kind === "selected" ? (
+            <section className="page-intro selected-intro shrink-0" aria-labelledby="selected-page-title">
+              <h1 id="selected-page-title" className="m-0 text-xl font-semibold leading-tight text-ink sm:text-2xl">ตรวจไฟล์ก่อนเริ่ม</h1>
+              <p className="m-0 mt-1 text-xs leading-relaxed text-ink-muted sm:text-sm">เลือกโมเดลแล้วเริ่มถอดเสียงเมื่อพร้อม</p>
+            </section>
+          ) : null}
+
+          {session.kind !== "succeeded" ? <section className="panel source-panel shrink-0 overflow-hidden rounded-2xl bg-surface shadow-[0_8px_26px_rgb(32_60_90_/_7%)]" aria-labelledby="source-title">
+            <div className="selected-toolbar grid min-w-0 grid-cols-2 items-center gap-x-3 gap-y-2.5 border-b border-line px-3 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:px-4 lg:grid-cols-[minmax(0,1fr)_auto_180px_auto] lg:items-center lg:gap-x-4">
+              <div className="source-summary col-span-2 row-start-1 flex min-w-0 items-center gap-3 sm:col-span-1 sm:col-start-1 sm:row-start-1 lg:col-span-1 lg:col-start-1">
                 <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-accent-soft text-accent" aria-hidden="true">
                   <svg className="size-5" viewBox="0 0 24 24" fill="none"><path d="M7 3.75h7l4.25 4.5v12H7zM14 3.75v4.5h4.25" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" /></svg>
                 </span>
@@ -338,13 +361,15 @@ export function TranscriptionWorkspace() {
                   <p className="panel-meta m-0 truncate text-xs text-ink-muted">{formatMediaType(media.file)} · {formatFileSize(media.file.size)} · {media.durationSeconds === null ? "กำลังอ่านความยาว" : "ความยาว " + Math.floor(media.durationSeconds / 60) + ":" + String(Math.floor(media.durationSeconds % 60)).padStart(2, "0")}</p>
                 </div>
               </div>
-              {(session.kind === "selected" || session.kind === "failed" || session.kind === "succeeded") ? (
-                <Button className="min-h-9 shrink-0 px-2 text-xs" variant="text" type="button" onClick={() => { replayWindowRef.current = null; clearSession(); setCurrentTime(0); }}>{session.kind === "selected" ? "ล้างไฟล์" : "เลือกไฟล์ใหม่"}</Button>
+              {canReplaceFile ? (
+                <div className="source-actions col-span-2 row-start-2 flex items-center justify-end gap-2 sm:col-span-1 sm:col-start-2 sm:row-start-1 lg:col-start-2 lg:row-start-1">
+                  <Button className="min-h-10 shrink-0 px-2 text-xs" variant="text" type="button" onClick={() => { replayWindowRef.current = null; clearSession(); setCurrentTime(0); }}>{session.kind === "selected" ? "ล้างไฟล์" : "เลือกไฟล์ใหม่"}</Button>
+                  <FileDrop compact disabled={false} error={selectionError} onSelect={handleSelectFile} onInvalid={setSelectionError} />
+                </div>
               ) : null}
-              <FileDrop compact disabled={session.kind !== "selected"} error={selectionError} onSelect={handleSelectFile} onInvalid={setSelectionError} />
               {session.kind === "selected" ? (
                 <>
-                <div className="model-field grid min-w-0 flex-1 basis-[160px] gap-1.5 sm:flex-none sm:basis-auto sm:w-[180px]">
+                <div className="model-field col-start-1 row-start-3 grid min-w-0 gap-1.5 sm:row-start-2 lg:col-start-3 lg:row-start-1">
                   <label className="text-xs font-semibold text-ink" htmlFor="whisper-model">โมเดลถอดเสียง</label>
                   <Select
                     id="whisper-model"
@@ -361,53 +386,58 @@ export function TranscriptionWorkspace() {
                     <option value="large-v3">large-v3</option>
                   </Select>
                 </div>
-                <Button ref={startButtonRef} className="start-button min-w-36 flex-1 sm:flex-none" variant="primary" type="button" onClick={() => void startTranscription()} disabled={serviceState !== "ready" || selectedModel === null || (media.durationSeconds !== null && media.durationSeconds > MAX_FILE_DURATION_SECONDS)}>
+                <Button ref={startButtonRef} className="start-button col-start-2 row-start-3 min-h-10 w-full min-w-0 self-end sm:row-start-2 lg:col-start-4 lg:row-start-1 lg:min-w-36" variant="primary" type="button" onClick={() => void startTranscription()} disabled={serviceState !== "ready" || selectedModel === null || (media.durationSeconds !== null && media.durationSeconds > MAX_FILE_DURATION_SECONDS)}>
                   เริ่มถอดเสียง <svg className="size-4" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 </Button>
                 </>
               ) : null}
+              {session.kind === "submitting" || session.kind === "queued" || session.kind === "running" ? (
+                <span className="col-start-2 row-start-2 justify-self-end rounded-full bg-emerald-50 px-3 py-2 text-xs font-semibold text-success sm:col-start-2 sm:row-start-1 lg:col-start-4 lg:row-start-1">กำลังดำเนินการ</span>
+              ) : null}
             </div>
             <ServiceNotice serviceState={serviceState} onRetry={() => void checkService()} />
-          </section>
+          </section> : null}
 
-          {session.kind === "succeeded" ? (
-            <SucceededWorkspace
-              key={session.jobId}
-              session={session}
-              currentTime={currentTime}
-              playerRef={playerRef}
-              onTimeChange={handleTimeChange}
-              onSeeking={handleSeeking}
-              onDuration={updateDuration}
-              onReplay={replaySegment}
-            />
-          ) : (
-            <WorkspaceBody
-              status={session.kind === "submitting" || session.kind === "queued" || session.kind === "running" ? <ProgressStrip session={session} jobMessage={jobMessage} /> : null}
-              primary={
-                <aside className="workspace-side flex min-h-0 min-w-0 flex-col">
-                  <GuidePanel />
-                </aside>
-              }
-              reference={
-                <div className="workspace-main flex min-h-0 min-w-0 flex-col gap-3">
-                  <MediaPlayer key={media.url} media={media} playerRef={playerRef} currentTime={currentTime} onTimeChange={handleTimeChange} onSeeking={handleSeeking} onDuration={(seconds) => updateDuration(media.url, seconds)} />
-                  {session.kind === "failed" || jobMessage ? (
-                    <div className="error-panel rounded-xl border border-red-200 bg-danger-soft p-4 text-danger" role="alert">
-                      <strong className="text-sm">{session.kind === "failed" ? "ถอดเสียงไม่สำเร็จ" : "เกิดปัญหา"}</strong>
-                      <p className="mb-2 mt-1 text-sm text-ink">{session.kind === "failed" ? session.message : jobMessage}</p>
-                      {session.kind === "failed" ? <Button variant="secondary" type="button" onClick={retryFailedJob}>ลองส่งไฟล์นี้อีกครั้ง</Button> : <span className="text-xs">เลือกไฟล์ใหม่เพื่อส่งงานอีกครั้ง</span>}
+          <WorkspaceBody
+            layout={session.kind === "succeeded" ? "review" : "work"}
+            primary={
+              <div className="workspace-main flex min-h-0 min-w-0 flex-col">
+                <MediaPlayer
+                  key={media.url}
+                  media={media}
+                  playerRef={playerRef}
+                  currentTime={currentTime}
+                  onTimeChange={handleTimeChange}
+                  onSeeking={handleSeeking}
+                  onDuration={(seconds) => updateDuration(media.url, seconds)}
+                  heading={session.kind === "selected" ? "ตัวอย่างไฟล์" : "เล่นสื่อต้นฉบับ"}
+                  hint={session.kind === "selected" ? "เล่นเพื่อตรวจไฟล์ได้" : session.kind === "succeeded" ? "กดแถวเวลาเพื่อย้อนฟัง" : "ไฟล์อยู่ในเซสชันนี้"}
+                  compactPreview={session.kind === "selected" || session.kind === "succeeded"}
+                  headerActions={session.kind === "succeeded" ? (
+                    <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+                      <Button className="min-h-9 px-2 text-xs" variant="text" type="button" onClick={() => { replayWindowRef.current = null; clearSession(); setCurrentTime(0); }}>ล้างไฟล์</Button>
+                      <FileDrop compact compactLabel="เลือกไฟล์ใหม่" disabled={false} error={selectionError} onSelect={handleSelectFile} onInvalid={setSelectionError} />
                     </div>
-                  ) : null}
-                </div>
-              }
-            />
-          )}
+                  ) : undefined}
+                />
+              </div>
+            }
+            reference={session.kind === "succeeded"
+              ? <SucceededWorkspace key={session.jobId} session={session} currentTime={currentTime} onReplay={replaySegment} />
+              : session.kind === "selected"
+                ? <ReadinessPanel jobMessage={jobMessage} />
+                : session.kind === "failed"
+                  ? <FailedPanel session={session} onRetry={retryFailedJob} />
+                  : session.kind === "submitting" || session.kind === "queued" || session.kind === "running"
+                    ? <ProgressPanel session={session} jobMessage={jobMessage} />
+                    : null}
+          />
         </div>
       )}
 
-      <footer className="page-footer flex shrink-0 items-center justify-between gap-3 border-t border-line py-3 text-[11px] text-ink-muted sm:min-h-[58px] sm:text-xs">
-        <p className="m-0">ไฟล์ไม่เกิน 1 GiB · ยาวไม่เกิน 2 ชั่วโมง · คิวรอได้สูงสุด 10 งาน</p>
+      <footer className="page-footer sticky bottom-0 z-20 flex shrink-0 items-center justify-between gap-3 border-t border-line bg-canvas py-3 text-xs text-ink-muted sm:min-h-[58px]">
+        <p className="m-0 hidden min-w-0 sm:block">ไฟล์ไม่เกิน 1 GiB · ยาวไม่เกิน 2 ชั่วโมง · คิวรอได้สูงสุด 10 งาน</p>
+        <p className="m-0 min-w-0 flex-1 sm:hidden">ไฟล์ไม่เกิน 1 GiB · ยาว 2 ชม. · คิวรอ 10 งาน</p>
         <p className="m-0 shrink-0 font-mono tracking-[0.08em] text-accent">TIME ATLAS</p>
       </footer>
     </main>

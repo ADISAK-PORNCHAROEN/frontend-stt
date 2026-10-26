@@ -58,7 +58,7 @@ test("#2 shows a clear unavailable state, keeps start disabled, and enables it a
   await expect(page.getByRole("status").filter({ hasText: "STT service ยังไม่พร้อม" })).toBeVisible();
   await page.locator('input[type="file"]').setInputFiles(silentWav());
   await expect(page.getByRole("button", { name: "เริ่มถอดเสียง" })).toBeDisabled();
-  await expect(page.getByText("ไฟล์ไม่เกิน 1 GiB")).toBeVisible();
+  await expect(page.locator(".page-footer").getByText(/คิวรอ 10 งาน/)).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
 
   stt.reset({ kind: "ready" });
@@ -95,7 +95,7 @@ test("#9 selects the configured Whisper model, supports keyboard changes, and re
   stt.advance();
   await expect(page.getByText("กำลังถอดเสียง", { exact: true })).toBeVisible();
   stt.advance();
-  await expect(page.locator(".error-panel")).toContainText("โมเดลที่เลือกโหลดไม่สำเร็จ");
+  await expect(page.locator(".failed-panel")).toContainText("โมเดลที่เลือกโหลดไม่สำเร็จ");
 
   await page.getByRole("button", { name: "ลองส่งไฟล์นี้อีกครั้ง" }).click();
   await expect(model).toBeVisible();
@@ -145,7 +145,7 @@ test("#3 shows upload and job progress, discloses retention, and renders a resul
   await page.goto(app.origin);
   await page.locator('input[type="file"]').setInputFiles(silentWav());
   await page.getByRole("button", { name: "เริ่มถอดเสียง" }).click();
-  await expect(page.getByText("กำลังส่งไฟล์ไปยัง service", { exact: true })).toBeVisible();
+  await expect(page.getByText("กำลังส่งไฟล์", { exact: true })).toBeVisible();
   await expect(page.getByRole("progressbar", { name: "ความคืบหน้าการส่งไฟล์" })).toBeVisible();
   await expect(page.locator(".retention-note")).toContainText("งานสำเร็จ");
   await expect(page.locator(".retention-note")).toContainText("24 ชั่วโมง");
@@ -161,7 +161,7 @@ test("#3 shows upload and job progress, discloses retention, and renders a resul
 
   stt.releaseSubmission();
   await expect(page.getByText("อยู่ในคิวถอดเสียง", { exact: true })).toBeVisible();
-  await expect(page.locator('input[type="file"]')).toBeDisabled();
+  await expect(page.locator('input[type="file"]')).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "บทถอดเสียง" })).toHaveCount(0);
   stt.advance();
   await expect(page.getByText("กำลังถอดเสียง", { exact: true })).toBeVisible();
@@ -206,7 +206,7 @@ test("#3 gives Thai recovery for service, queue, invalid-media, expired-job, and
   await expect(page.getByRole("button", { name: "เริ่มถอดเสียง" })).toBeEnabled();
   stt.reset({ kind: "unavailable" });
   await page.getByRole("button", { name: "เริ่มถอดเสียง" }).click();
-  await expect(page.locator(".error-panel")).toContainText("เชื่อมต่อ STT service ไม่ได้");
+  await expect(page.locator(".readiness-panel [role=alert]")).toContainText("เชื่อมต่อ STT service ไม่ได้");
   await clear();
 
   stt.reset({ kind: "ready" });
@@ -218,13 +218,13 @@ test("#3 gives Thai recovery for service, queue, invalid-media, expired-job, and
   stt.reset({ kind: "reject", code: "queue_full" });
   await choose();
   await page.getByRole("button", { name: "เริ่มถอดเสียง" }).click();
-  await expect(page.locator(".error-panel")).toContainText("คิวถอดเสียงเต็ม");
+  await expect(page.locator(".readiness-panel [role=alert]")).toContainText("คิวถอดเสียงเต็ม");
   await clear();
 
   stt.reset({ kind: "reject", code: "invalid_input" });
   await choose();
   await page.getByRole("button", { name: "เริ่มถอดเสียง" }).click();
-  await expect(page.locator(".error-panel")).toContainText("ไม่มีเสียงที่ใช้งานได้");
+  await expect(page.locator(".readiness-panel [role=alert]")).toContainText("ไม่มีเสียงที่ใช้งานได้");
   await clear();
 
   stt.reset({ kind: "job", outcome: "expired" });
@@ -232,7 +232,7 @@ test("#3 gives Thai recovery for service, queue, invalid-media, expired-job, and
   await page.getByRole("button", { name: "เริ่มถอดเสียง" }).click();
   await expect(page.getByText("อยู่ในคิวถอดเสียง", { exact: true })).toBeVisible();
   stt.advance();
-  await expect(page.locator(".error-panel")).toContainText("ไม่พบงานนี้หรือข้อมูลหมดอายุแล้ว");
+  await expect(page.locator(".failed-panel")).toContainText("ไม่พบงานนี้หรือข้อมูลหมดอายุแล้ว");
   await expect(page.getByRole("button", { name: "เลือกไฟล์ใหม่" })).toBeVisible();
   await clear();
 
@@ -243,7 +243,7 @@ test("#3 gives Thai recovery for service, queue, invalid-media, expired-job, and
   stt.advance();
   await expect(page.getByText("กำลังถอดเสียง", { exact: true })).toBeVisible();
   stt.advance();
-  await expect(page.locator(".error-panel")).toContainText("เกิดข้อผิดพลาดระหว่างถอดเสียง");
+  await expect(page.locator(".failed-panel")).toContainText("เกิดข้อผิดพลาดระหว่างถอดเสียง");
   await expect(page.getByRole("button", { name: "เลือกไฟล์ใหม่" })).toBeVisible();
 });
 
@@ -274,8 +274,8 @@ test("#4 reviews, seeks, follows, and exports the transcript on desktop and mobi
   expect(mediaBox).not.toBeNull();
   expect(transcriptBox).not.toBeNull();
   expect(Math.abs((mediaBox?.y ?? 0) - (transcriptBox?.y ?? 0))).toBeLessThan(2);
-  expect((transcriptBox?.x ?? 0) + (transcriptBox?.width ?? 0)).toBeLessThan(mediaBox?.x ?? 0);
-  expect(transcriptBox?.width ?? 0).toBeGreaterThan((mediaBox?.width ?? 0) * 1.75);
+  expect((mediaBox?.x ?? 0) + (mediaBox?.width ?? 0)).toBeLessThanOrEqual(transcriptBox?.x ?? 0);
+  expect(transcriptBox?.width ?? 0).toBeGreaterThan((mediaBox?.width ?? 0) * 1.3);
   await page.screenshot({ path: testInfo.outputPath("issue-4-completed-desktop.png"), fullPage: true });
 
   const secondSegment = segmentButtons.nth(1);
@@ -369,11 +369,13 @@ test("#4 reviews, seeks, follows, and exports the transcript on desktop and mobi
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
   const mobileMediaBox = await page.locator(".media-panel").boundingBox();
   const mobileTranscriptBox = await transcript.boundingBox();
-  expect((mobileTranscriptBox?.y ?? 0) + (mobileTranscriptBox?.height ?? 0)).toBeLessThan(mobileMediaBox?.y ?? 0);
-  expect(await transcript.locator(".transcript-list").evaluate((element) => getComputedStyle(element).overflowY)).toBe("visible");
+  expect((mobileMediaBox?.y ?? 0) + (mobileMediaBox?.height ?? 0)).toBeLessThanOrEqual(mobileTranscriptBox?.y ?? 0);
+  expect(await transcript.locator(".transcript-list").evaluate((element) => getComputedStyle(element).overflowY)).toBe("auto");
+  expect(await page.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight + 1)).toBe(true);
   await lastSegment.click();
   await expect(lastSegment).toHaveAttribute("aria-current", "true");
-  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+  await expect.poll(() => transcript.locator(".transcript-list").evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
   await page.screenshot({ path: testInfo.outputPath("issue-4-completed-mobile.png"), fullPage: true });
 });
 
@@ -418,6 +420,7 @@ test("#10 replays, edits, views original, saves once per attempt, and exports th
   await firstEditor.fill("ประโยคแรกที่แก้ด้วยคีย์บอร์ด");
   await expect(secondEdit).toBeDisabled();
   await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
   await expect(page.getByRole("button", { name: "เก็บช่วงนี้" })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(firstEdit).toBeVisible();
@@ -428,7 +431,7 @@ test("#10 replays, edits, views original, saves once per attempt, and exports th
   const secondEditor = transcript.getByRole("textbox", { name: "แก้ไขข้อความช่วงเวลา 00:02.0" });
   await expect(firstEdit).toBeDisabled();
   await secondEditor.fill("ฉบับชั่วคราวที่ยกเลิก");
-  await page.getByRole("button", { name: "ยกเลิก" }).click();
+  await page.getByRole("button", { name: "ยกเลิกช่วงนี้" }).click();
   await expect(secondEdit).toBeVisible();
   await expect(secondEdit).toBeFocused();
   await expect(firstEdit).toBeEnabled();
@@ -453,7 +456,7 @@ test("#10 replays, edits, views original, saves once per attempt, and exports th
   await expect(transcript.locator(".segment-copy").nth(0)).toContainText("ประโยคแรกที่แก้ด้วยคีย์บอร์ด");
   await expect(transcript.locator(".segment-copy").nth(1)).toContainText("ประโยคที่สองที่แก้ไข");
 
-  const saveButton = page.getByRole("button", { name: "บันทึกการแก้ไข" });
+  const saveButton = page.getByRole("button", { name: "บันทึกทั้งหมด" });
   await saveButton.focus();
   await page.keyboard.press("Enter");
   await expect(transcript.getByRole("alert")).toContainText("บันทึกการแก้ไขไม่สำเร็จ");
@@ -464,20 +467,20 @@ test("#10 replays, edits, views original, saves once per attempt, and exports th
 
   await page.setViewportSize({ width: 375, height: 812 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight + 1)).toBe(true);
   await expect(page.getByRole("button", { name: "ลองบันทึกอีกครั้ง" })).toBeVisible();
   const thirdEdit = transcript.getByRole("button", { name: "แก้ไขข้อความช่วงเวลา 00:04.0" });
   await thirdEdit.focus();
   await page.keyboard.press("Enter");
   await transcript.getByRole("textbox", { name: "แก้ไขข้อความช่วงเวลา 00:04.0" }).fill("ยกเลิกด้วยคีย์บอร์ด");
   await page.keyboard.press("Tab");
-  await page.keyboard.press("Tab");
-  await expect(page.getByRole("button", { name: "ยกเลิก" })).toBeFocused();
+  await expect(page.getByRole("button", { name: "ยกเลิกช่วงนี้" })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(thirdEdit).toBeVisible();
   await expect(thirdEdit).toBeFocused();
   await page.screenshot({ path: testInfo.outputPath("issue-10-review-unsaved-mobile.png"), fullPage: true });
 
-  await page.getByRole("button", { name: /บันทึกการแก้ไข|ลองบันทึกอีกครั้ง/ }).click();
+  await page.getByRole("button", { name: /บันทึกทั้งหมด|ลองบันทึกอีกครั้ง/ }).click();
   await expect(page.getByRole("status").filter({ hasText: "บันทึกแล้ว" })).toBeVisible();
   await expect(page.getByRole("link", { name: "ดาวน์โหลด JSON" })).toBeEnabled();
   await expect.poll(() => stt.saves().length).toBe(2);
