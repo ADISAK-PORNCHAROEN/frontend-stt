@@ -106,6 +106,12 @@ describe("TranscriptionWorkspace", () => {
     const selected = sessionState({ session: selectedSession(), media: selectedSession() });
     mocks.useTranscriptionSession.mockReturnValue(selected);
     const view = render(<TranscriptionWorkspace />);
+    const toolbar = document.querySelector(".selected-toolbar");
+    expect(toolbar).toContainElement(screen.getByLabelText("เปลี่ยนไฟล์"));
+    expect(toolbar).toContainElement(screen.getByRole("combobox", { name: "โมเดลถอดเสียง" }));
+    expect(toolbar).toContainElement(screen.getByRole("button", { name: "เริ่มถอดเสียง" }));
+    expect(toolbar?.querySelector("#file-help, .drop-footnote, .drop-size")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "ล้างไฟล์" })).toBeInTheDocument();
     const model = screen.getByRole("combobox", { name: "โมเดลถอดเสียง" });
     fireEvent.change(model, { target: { value: "large-v3" } });
     expect(selected.chooseModel).toHaveBeenCalledWith("large-v3");
@@ -115,7 +121,7 @@ describe("TranscriptionWorkspace", () => {
     expect(selected.startTranscription).toHaveBeenCalledOnce();
     fireEvent.change(screen.getByLabelText("เปลี่ยนไฟล์"), { target: { files: [new File(["another"], "again.mp3", { type: "audio/mpeg" })] } });
     expect(selected.selectFile).toHaveBeenCalledWith(expect.objectContaining({ name: "again.mp3" }));
-    fireEvent.click(screen.getByRole("button", { name: "เลือกไฟล์ใหม่" }));
+    fireEvent.click(screen.getByRole("button", { name: "ล้างไฟล์" }));
     expect(selected.clearSession).toHaveBeenCalledOnce();
 
     const unavailable = sessionState({ session: selectedSession(), media: selectedSession(), serviceState: "unavailable", selectedModel: null });
@@ -148,6 +154,16 @@ describe("TranscriptionWorkspace", () => {
       const state = sessionState({ session, media: session, jobMessage: index === 2 ? "กำลังรอการตอบกลับ" : null });
       mocks.useTranscriptionSession.mockReturnValue(state);
       const view = render(<TranscriptionWorkspace />);
+      const workspaceBody = document.querySelector(".workspace-body");
+      const progressPanel = document.querySelector(".progress-panel");
+      expect(progressPanel).not.toBeNull();
+      expect(progressPanel?.parentElement).toBe(workspaceBody);
+      const workspaceGrid = workspaceBody?.querySelector(".workspace-grid");
+      expect(workspaceGrid).not.toBeNull();
+      if (!workspaceGrid || !progressPanel) throw new Error("Workspace progress layout not rendered");
+      expect(workspaceGrid.compareDocumentPosition(progressPanel) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+      expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", String(index === 0 ? 35 : index === 1 ? 0 : 47));
+      expect(progressPanel?.querySelector("ol")).toBeNull();
       if (index === 0) expect(document.querySelector(".progress-panel")).toHaveTextContent("กำลังส่งไฟล์ไปยัง service");
       if (index === 1) expect(document.querySelector(".progress-label h2")).toHaveTextContent("อยู่ในคิวถอดเสียง");
       if (index === 2) expect(screen.getByText("กำลังถอดเสียง", { exact: true }).parentElement).toHaveTextContent("47%");
@@ -206,8 +222,12 @@ describe("TranscriptionWorkspace", () => {
     mocks.useTranscriptionSession.mockReturnValue(sessionHooks);
     mocks.useTranscriptReview.mockReturnValue(cleanReview);
     const view = render(<TranscriptionWorkspace />);
+    const workspaceGrid = document.querySelector(".workspace-grid");
+    expect(Array.from(workspaceGrid?.children ?? []).map((element) => element.className.split(" ")[0])).toEqual(["workspace-side", "workspace-main"]);
     expect(screen.getByRole("link", { name: "ดาวน์โหลด TXT" })).toHaveAttribute("href", `/api/stt/jobs/${JOB_ID}/result?format=txt`);
-    expect(screen.getByText(/ถอดเสียงเสร็จแล้ว/)).toBeInTheDocument();
+    const successStatus = screen.getByText(/ถอดเสียงเสร็จแล้ว/);
+    expect(successStatus.parentElement).toHaveClass("workspace-body");
+    expect(successStatus.nextElementSibling).toHaveClass("workspace-grid");
     expect(mocks.useTranscriptReview).toHaveBeenCalledWith(JOB_ID, transcript);
     const succeededAudio = screen.getByLabelText("เล่นไฟล์เสียง sample.wav");
     Object.defineProperty(succeededAudio, "duration", { configurable: true, value: 28 });

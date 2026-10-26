@@ -12,6 +12,20 @@ function makeFile(name: string, type = "audio/wav", size = 16): File {
 }
 
 describe("FileDrop", () => {
+  it("keeps compact file replacement free of dropzone-only copy and references only rendered errors", () => {
+    const { container, rerender } = render(<FileDrop compact disabled={false} error={null} onSelect={vi.fn()} onInvalid={vi.fn()} />);
+    const input = container.querySelector<HTMLInputElement>("#media-file");
+    if (!input) throw new Error("Compact media file input not rendered");
+    expect(input).not.toHaveAttribute("aria-describedby");
+    expect(container.querySelector("#file-help, .drop-footnote, .drop-size, .drop-copy")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("เปลี่ยนไฟล์")).toBeInTheDocument();
+
+    rerender(<FileDrop compact disabled={false} error="ไฟล์ไม่รองรับ" onSelect={vi.fn()} onInvalid={vi.fn()} />);
+    expect(input).toHaveAttribute("aria-describedby", "file-error");
+    expect(container.querySelector("#file-error")).toHaveTextContent("ไฟล์ไม่รองรับ");
+    expect(container.querySelector("#file-help, .drop-footnote, .drop-size")).not.toBeInTheDocument();
+  });
+
   it("selects supported files by picker and drop, and clears the native input", () => {
     const onSelect = vi.fn();
     const { container } = render(<FileDrop disabled={false} error={null} onSelect={onSelect} onInvalid={vi.fn()} />);

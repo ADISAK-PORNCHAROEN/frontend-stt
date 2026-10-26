@@ -17,7 +17,7 @@ The repository has a Playwright API integration and browser journey harness for 
 | npm run dev | package.json, using next dev | Local development server | Interactive runtime, not an automated test suite |
 | npm start | package.json, using next start | Serves a prior production build | Requires a build first |
 
-`npx tsc --noEmit` is the local typecheck command. The Playwright configuration writes its HTML report to ignored `playwright-report/`; the four-state visual tests attach passing screenshots for start, processing, completed, and editing at 1440×1000, 1280×720, and 390×844. Coverage output stays in ignored `coverage/`.
+`npx tsc --noEmit` is the local typecheck command. The Playwright configuration writes its HTML report to ignored `playwright-report/`; the visual-state test attaches screenshots for start, selected, processing, completed, and editing at 1440×1000, 1280×720, and 390×844. Coverage output stays in ignored `coverage/`.
 
 The Playwright worker starts an in-process service fixture on an ephemeral loopback port, builds the real app into its isolated output directory, then starts a loopback production server. API tests send real HTTP requests through the Next.js routes; browser tests run in the installed Microsoft Edge channel. The fixture supplies deterministic model readiness/defaults, upload values, job states, save failures, original/latest transcript results, and exports. No test calls the real STT service.
 
