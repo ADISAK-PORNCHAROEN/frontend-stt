@@ -11,6 +11,7 @@ async function expectViewportContract(page: import("@playwright/test").Page): Pr
   const geometry = await page.evaluate(() => {
     const header = document.querySelector(".topbar");
     const footer = document.querySelector(".page-footer");
+    const shell = document.querySelector(".site-shell");
     const intro = document.querySelector(".page-intro");
     const homeContent = document.querySelector(".home-screen") ?? document.querySelector(".workspace-content");
     return {
@@ -18,6 +19,9 @@ async function expectViewportContract(page: import("@playwright/test").Page): Pr
       documentHeight: document.documentElement.scrollHeight,
       viewportWidth: window.innerWidth,
       viewportHeight: window.innerHeight,
+      shellLeft: shell?.getBoundingClientRect().left ?? -1,
+      shellRight: shell?.getBoundingClientRect().right ?? -1,
+      shellWidth: shell?.getBoundingClientRect().width ?? -1,
       headerTop: header?.getBoundingClientRect().top ?? -1,
       headerBottom: header?.getBoundingClientRect().bottom ?? -1,
       introTop: intro?.getBoundingClientRect().top ?? null,
@@ -31,6 +35,9 @@ async function expectViewportContract(page: import("@playwright/test").Page): Pr
   });
   expect(geometry.documentWidth).toBeLessThanOrEqual(geometry.viewportWidth + 1);
   expect(geometry.documentHeight).toBeLessThanOrEqual(geometry.viewportHeight + 1);
+  expect(geometry.shellLeft).toBe(0);
+  expect(Math.abs(geometry.shellRight - geometry.viewportWidth)).toBeLessThanOrEqual(1);
+  expect(Math.abs(geometry.shellWidth - geometry.viewportWidth)).toBeLessThanOrEqual(1);
   expect(geometry.headerTop).toBe(0);
   expect(Math.abs(geometry.footerBottom - geometry.viewportHeight)).toBeLessThanOrEqual(1);
   if (geometry.introTop !== null) {
@@ -72,6 +79,11 @@ for (const viewport of viewports) {
     await expect(toolbar.locator("#whisper-model")).toBeVisible();
     await expect(toolbar.getByRole("button", { name: "เริ่มถอดเสียง" })).toBeVisible();
     await expect(toolbar.locator("#file-help, .drop-footnote, .drop-size")).toHaveCount(0);
+    const modelBox = await toolbar.locator(".model-field").boundingBox();
+    const startBox = await toolbar.getByRole("button", { name: "เริ่มถอดเสียง" }).boundingBox();
+    expect(modelBox).not.toBeNull();
+    expect(startBox).not.toBeNull();
+    expect(Math.abs(((modelBox?.y ?? 0) + (modelBox?.height ?? 0) / 2) - ((startBox?.y ?? 0) + (startBox?.height ?? 0) / 2))).toBeLessThan(12);
     if (viewport.name !== "mobile") {
       const controls = await Promise.all([
         toolbar.locator(".source-summary"),
@@ -93,7 +105,7 @@ for (const viewport of viewports) {
     stt.advance();
     const transcript = page.locator(".transcript-panel");
     await expect(transcript).toBeVisible();
-    const successStatus = transcript.getByText(/ถอดเสียงเสร็จแล้ว/);
+    const successStatus = transcript.getByText(/ฉบับล่าสุด · \d+ ช่วง/);
     await expect(successStatus).toBeVisible();
     const media = page.locator(".media-panel");
     const transcriptBox = await transcript.boundingBox();
@@ -136,6 +148,7 @@ for (const viewport of viewports) {
       mimeType: "video/mp4",
       buffer: Buffer.from([0, 0, 0, 0]),
     });
+    await page.getByRole("dialog", { name: "ยืนยันการแทนที่ไฟล์" }).getByRole("button", { name: "แทนที่ไฟล์" }).click();
     const video = page.locator("video");
     await expect(video).toBeVisible();
     await expect(video).toHaveAttribute("controls", "");

@@ -1,31 +1,29 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode, type TouchEvent, type WheelEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type TouchEvent, type WheelEvent } from "react";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { formatTimestamp } from "../format";
-import type { Transcript, TranscriptSegment } from "../types";
+import { createTranscriptExport, serializeTranscript, TRANSCRIPT_EXPORT_FORMATS, type TranscriptExportFormat } from "../export-format";
+import type { TranscriptSegment } from "../types";
+import type { ReviewView, SwitchDecision } from "../review-state";
+import { SessionDialog } from "./session-dialog";
 
 type Props = {
-  transcript: Transcript;
+  view: ReviewView;
   currentTime: number;
-  isOriginal: boolean;
-  isDirty: boolean;
-  isSaving: boolean;
-  saveState: { kind: "idle" } | { kind: "saving" } | { kind: "saved" } | { kind: "failed"; message: string };
-  originalState: { kind: "unloaded" } | { kind: "loading" } | { kind: "loaded"; transcript: Transcript } | { kind: "failed"; message: string };
-  activeEdit: { segmentId: number; text: string } | null;
-  stagedCount: number;
-  downloadActions?: ReactNode;
   onReplay: (segment: TranscriptSegment) => void;
   onBeginEdit: (segmentId: number) => void;
   onEdit: (text: string) => void;
   onStageEdit: () => void;
   onCancelEdit: () => void;
   onDiscardChanges: () => void;
-  onViewOriginal: () => void;
-  onViewLatest: () => void;
-  onSave: () => void;
+  onSaveDraft: () => void;
+  onSelectRevision: (id: string) => void;
+  onResolveSwitch: (decision: SwitchDecision) => void;
+  onRetryOriginal: () => void;
+  onCommit: () => void;
 };
 
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -33,38 +31,38 @@ function isEditableTarget(target: EventTarget | null): boolean {
 }
 
 export function TranscriptPanel({
-  transcript,
+  view,
   currentTime,
-  isOriginal,
-  isDirty,
-  isSaving,
-  saveState,
-  originalState,
-  activeEdit,
-  stagedCount,
-  downloadActions,
   onReplay,
   onBeginEdit,
   onEdit,
   onStageEdit,
   onCancelEdit,
   onDiscardChanges,
-  onViewOriginal,
-  onViewLatest,
-  onSave,
+  onSaveDraft,
+  onSelectRevision,
+  onResolveSwitch,
+  onRetryOriginal,
+  onCommit,
 }: Props) {
-  const lastSegmentIndex = transcript.segments.length - 1;
-  const activeSegment = transcript.segments.find((segment, index) =>
+  const { transcript, selectedSnapshotTranscript, isOriginal, isDirty, isSaving, activeEdit, stagedCount, revisions, selectedId, selectedLabel, isLatest, commitState, originalState, pendingSwitch, draftSaveCount } = view;
+  const segments = transcript?.segments ?? [];
+  const lastSegmentIndex = segments.length - 1;
+  const activeSegment = segments.find((segment, index) =>
     currentTime >= segment.start &&
     (currentTime < segment.end || (index === lastSegmentIndex && currentTime <= segment.end)),
   );
   const listRef = useRef<HTMLOListElement>(null);
   const activeRowRef = useRef<HTMLLIElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
+  const revisionSelectRef = useRef<HTMLSelectElement>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const editButtonRefs = useRef(new Map<number, HTMLButtonElement>());
   const focusEditButtonAfterClose = useRef<number | null>(null);
   const [isFollowing, setIsFollowing] = useState(true);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [exportFormat, setExportFormat] = useState<TranscriptExportFormat>("json");
+  const previousDraftSaveCount = useRef(draftSaveCount);
 
   const scrollActiveRowIntoView = useCallback(() => {
     const list = listRef.current;
@@ -92,7 +90,7 @@ export function TranscriptPanel({
   const activeEditId = activeEdit?.segmentId ?? null;
   const editedSegment = activeEditId === null
     ? undefined
-    : transcript.segments.find((segment) => segment.id === activeEditId);
+    : segments.find((segment) => segment.id === activeEditId);
 
   useEffect(() => {
     if (activeEditId !== null) {
@@ -106,8 +104,9 @@ export function TranscriptPanel({
   }, [activeEditId]);
 
   useEffect(() => {
-    if (saveState.kind === "saved") titleRef.current?.focus({ preventScroll: true });
-  }, [saveState.kind]);
+    if (draftSaveCount > previousDraftSaveCount.current) revisionSelectRef.current?.focus({ preventScroll: true });
+    previousDraftSaveCount.current = draftSaveCount;
+  }, [draftSaveCount]);
 
   function pauseFollowForManualScroll(): void {
     const list = listRef.current;
@@ -159,42 +158,82 @@ export function TranscriptPanel({
     onCancelEdit();
   }
 
+  function downloadSelectedRevision(): void {
+    if (!selectedSnapshotTranscript || !selectedId || isDirty || isSaving || pendingSwitch) return;
+    const exported = createTranscriptExport(selectedSnapshotTranscript, selectedId, exportFormat);
+    const objectUrl = URL.createObjectURL(new Blob([exported.content], { type: exported.mimeType }));
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = exported.fileName;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1_000);
+  }
+
   return (
-    <section className="panel transcript-panel flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl bg-surface shadow-[0_8px_26px_rgb(32_60_90_/_7%)]" aria-labelledby="transcript-title">
-      <div className="panel-heading transcript-heading flex shrink-0 flex-col gap-3 border-b border-line px-4 py-3 sm:px-5 lg:flex-row lg:items-center lg:justify-between">
+    <section className="panel transcript-panel flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl bg-surface shadow-[0_8px_26px_rgb(32_60_90_/_7%)]" aria-labelledby="transcript-title" aria-busy={isSaving}>
+      <div className="panel-heading transcript-heading flex shrink-0 flex-col gap-3 border-b border-line px-4 py-3 sm:px-5 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 id="transcript-title" ref={titleRef} tabIndex={-1} className="m-0 text-base font-semibold leading-snug text-ink">{isOriginal ? "บทถอดเสียงต้นฉบับ" : activeEdit ? "กำลังแก้ไขฉบับล่าสุด" : "บทถอดเสียง"}</h2>
-            {!isOriginal && !activeEdit ? <span className="inline-flex min-h-7 items-center gap-1 rounded-full bg-emerald-50 px-2.5 text-xs font-semibold text-success" role="status"><span aria-hidden="true">✓</span>ถอดเสียงเสร็จแล้ว · {transcript.segments.length} ช่วง</span> : null}
+            <h2 id="transcript-title" ref={titleRef} tabIndex={-1} className="m-0 text-base font-semibold leading-snug text-ink">{activeEdit ? `กำลังแก้ไข${selectedLabel ? ` ${selectedLabel}` : ""}` : isOriginal ? "บทถอดเสียงต้นฉบับ" : selectedLabel ?? "บทถอดเสียง"}</h2>
+            {transcript && !activeEdit ? <span className="inline-flex min-h-7 items-center gap-1 rounded-full bg-emerald-50 px-2.5 text-xs font-semibold text-success" role="status"><span aria-hidden="true">✓</span>{isOriginal ? "ต้นฉบับ · อ่านและแก้ไขได้โดยไม่เปลี่ยนต้นฉบับ" : isLatest ? `ฉบับล่าสุด · ${transcript.segments.length} ช่วง` : `ฉบับร่าง · ${transcript.segments.length} ช่วง`}</span> : null}
           </div>
-          <p className="panel-meta m-0 mt-1 text-xs text-ink-muted">{activeEdit ? "แก้เฉพาะข้อความ เวลาของแต่ละช่วงจะคงเดิม" : `${transcript.segments.length} ช่วงเวลา · กดแถวเพื่อฟังช่วงนั้น`}</p>
+          <p className="panel-meta m-0 mt-1 text-xs text-ink-muted">{activeEdit ? "แก้เฉพาะข้อความ เวลาของแต่ละช่วงจะคงเดิม" : transcript ? `${transcript.segments.length} ช่วงเวลา · กดแถวเพื่อฟังช่วงนั้น` : "กำลังเปิดฉบับที่เลือก"}</p>
         </div>
-        <div className="transcript-actions flex flex-wrap items-center justify-start gap-2 lg:justify-end">
-          {!activeEdit ? downloadActions : null}
+        <div className="transcript-actions grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end lg:flex lg:flex-wrap lg:items-end lg:justify-end">
+          <div className="grid min-w-0 gap-1">
+            <label className="text-xs font-semibold text-ink" htmlFor="transcript-revision">เลือกฉบับบทถอดเสียง</label>
+            <Select
+              ref={revisionSelectRef}
+              id="transcript-revision"
+              className="min-h-9 w-full min-w-0 px-2 text-xs sm:min-w-52"
+              aria-label="เลือกฉบับบทถอดเสียง"
+              value={selectedId ?? ""}
+              disabled={isSaving}
+              onChange={(event) => onSelectRevision(event.currentTarget.value)}
+            >
+              {revisions.map(({ id, label }) => <option key={id} value={id}>{label}</option>)}
+            </Select>
+          </div>
+          <div className="flex min-w-0 flex-wrap items-center justify-start gap-1.5 sm:justify-end lg:shrink-0">
+            <Button
+              className="min-h-9 px-3 text-xs"
+              variant="secondary"
+              type="button"
+              onClick={() => setIsPreviewOpen(true)}
+              disabled={!selectedSnapshotTranscript || pendingSwitch !== null}
+            >
+              ตัวอย่างและส่งออก
+            </Button>
+            <Button
+              className="min-h-9 px-3 text-xs"
+              variant="primary"
+              type="button"
+              onClick={onCommit}
+              disabled={!transcript || isLatest || isDirty || isSaving}
+            >
+              {isSaving ? "กำลังตั้งฉบับล่าสุด" : commitState.kind === "failed" ? "ลองอีกครั้ง" : "ตั้งเป็นฉบับล่าสุด"}
+            </Button>
+          </div>
           {!isFollowing ? (
             <Button variant="text" className="min-h-10 px-2 text-xs" type="button" onClick={returnToFollow}>
               กลับไปติดตามเสียง
             </Button>
           ) : null}
-          <Button
-            variant="text"
-            className="min-h-10 px-2 text-xs"
-            type="button"
-            disabled={originalState.kind === "loading"}
-            onClick={isOriginal ? onViewLatest : onViewOriginal}
-          >
-            {originalState.kind === "loading" ? "กำลังโหลดต้นฉบับ" : isOriginal ? "กลับไปฉบับแก้ไข" : "ดูต้นฉบับ"}
-          </Button>
         </div>
       </div>
 
       {isDirty ? (
-        <p className="unsaved-note m-0 border-b border-line bg-accent-soft px-4 py-2 text-xs text-ink" role="status">มีการแก้ไขที่ยังไม่ได้บันทึก · บันทึกก่อนดาวน์โหลด</p>
-      ) : saveState.kind === "saved" ? (
-        <p className="review-saved-note m-0 border-b border-line bg-emerald-50 px-4 py-2 text-xs text-success" role="status">บันทึกแล้ว · ไฟล์ดาวน์โหลดใช้ฉบับล่าสุด</p>
+        <p className="unsaved-note m-0 border-b border-line bg-accent-soft px-4 py-2 text-xs text-ink" role="status">มีข้อความที่ยังไม่ได้บันทึกเป็นฉบับร่าง</p>
+      ) : commitState.kind === "saved" ? (
+        <p className="review-saved-note m-0 border-b border-line bg-emerald-50 px-4 py-2 text-xs text-success" role="status">ตั้งฉบับที่เลือกเป็นฉบับล่าสุดแล้ว</p>
       ) : null}
-      {saveState.kind === "failed" ? <p className="review-error m-0 border-b border-line bg-danger-soft px-4 py-2 text-xs text-danger" role="alert">{saveState.message}</p> : null}
-      {originalState.kind === "failed" ? <p className="review-error m-0 border-b border-line bg-danger-soft px-4 py-2 text-xs text-danger" role="alert">{originalState.message}</p> : null}
+      {commitState.kind === "failed" ? <p className="review-error m-0 border-b border-line bg-danger-soft px-4 py-2 text-xs text-danger" role="alert">{commitState.message} ฉบับที่เลือกยังอยู่ครบ</p> : null}
+      {originalState.kind === "failed" ? (
+        <div className="review-error flex flex-wrap items-center justify-between gap-2 border-b border-line bg-danger-soft px-4 py-2 text-xs text-danger" role="alert">
+          <span>{originalState.message}</span>
+          <Button variant="secondary" className="min-h-8 px-2 text-xs" type="button" onClick={onRetryOriginal}>ลองโหลดอีกครั้ง</Button>
+        </div>
+      ) : null}
 
       {editedSegment && activeEdit ? (
         <div className="focus-editor mx-3 mt-2 grid shrink-0 gap-1.5 rounded-xl border border-coordinate-soft bg-surface-soft p-2.5 sm:mx-4 sm:mt-3 sm:gap-2 sm:p-4">
@@ -219,7 +258,11 @@ export function TranscriptPanel({
         </div>
       ) : null}
 
-      {transcript.segments.length === 0 ? (
+      {!transcript ? (
+        <div className="transcript-empty grid flex-1 place-items-center px-6 py-8 text-center" role="status">
+          <p className="m-0 text-sm font-medium text-ink">{originalState.kind === "loading" ? "กำลังโหลดบทถอดเสียงต้นฉบับ" : "ไม่พบฉบับที่เลือก"}</p>
+        </div>
+      ) : segments.length === 0 ? (
         <div className="transcript-empty grid flex-1 place-items-center px-6 py-8 text-center" role="status">
           <div>
             <p className="m-0 text-sm font-medium text-ink">ไม่พบคำพูดในไฟล์นี้</p>
@@ -236,7 +279,7 @@ export function TranscriptPanel({
           onKeyDown={handleKeyDown}
           onPointerDown={handlePointerDown}
         >
-          {transcript.segments.map((segment) => {
+          {segments.map((segment) => {
             const isActive = activeSegment?.id === segment.id;
             const isSelectedForEdit = activeEdit?.segmentId === segment.id;
             const timestamp = formatTimestamp(segment.start);
@@ -249,7 +292,7 @@ export function TranscriptPanel({
                 <div className={"segment-content grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-2 rounded-lg border border-transparent p-1.5 " + ((isActive || isSelectedForEdit) ? "bg-accent-soft" : "")}>
                       <button
                         type="button"
-                        className={"segment-button grid min-h-11 w-full min-w-0 grid-cols-[60px_minmax(0,1fr)] items-start gap-2 rounded-md px-1 py-2 text-left text-ink hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent " + (isOriginal ? "col-span-2" : "")}
+                        className="segment-button grid min-h-11 w-full min-w-0 grid-cols-[60px_minmax(0,1fr)] items-start gap-2 rounded-md px-1 py-2 text-left text-ink hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
                         onClick={() => onReplay(segment)}
                         aria-current={isActive ? "true" : undefined}
                         aria-label={"เล่นช่วงเวลา " + timestamp + ": " + segment.text}
@@ -257,22 +300,20 @@ export function TranscriptPanel({
                         <time className="segment-time font-mono text-xs leading-relaxed tabular-nums text-accent" dateTime={"PT" + segment.start + "S"}>{timestamp}</time>
                         <span className="segment-copy min-w-0 whitespace-pre-wrap py-0.5 text-sm leading-relaxed [overflow-wrap:anywhere]">{segment.text}</span>
                       </button>
-                      {!isOriginal ? (
-                        <Button
-                          ref={(element) => {
-                            if (element) editButtonRefs.current.set(segment.id, element);
-                            else editButtonRefs.current.delete(segment.id);
-                          }}
-                          className="min-h-9 self-start px-2 text-xs"
-                          variant="secondary"
-                          type="button"
-                          aria-label={"แก้ไขข้อความช่วงเวลา " + timestamp}
-                          onClick={() => onBeginEdit(segment.id)}
-                          disabled={isSaving || activeEdit !== null}
-                        >
-                          แก้ไข
-                        </Button>
-                      ) : null}
+                      <Button
+                        ref={(element) => {
+                          if (element) editButtonRefs.current.set(segment.id, element);
+                          else editButtonRefs.current.delete(segment.id);
+                        }}
+                        className="min-h-9 self-start px-2 text-xs"
+                        variant="secondary"
+                        type="button"
+                        aria-label={"แก้ไขข้อความช่วงเวลา " + timestamp}
+                        onClick={() => onBeginEdit(segment.id)}
+                        disabled={isSaving || activeEdit !== null || !transcript}
+                      >
+                        แก้ไข
+                      </Button>
                 </div>
               </li>
             );
@@ -280,17 +321,61 @@ export function TranscriptPanel({
         </ol>
       )}
 
-      {!isOriginal && (isDirty || activeEdit !== null) ? (
+      {isDirty || activeEdit !== null ? (
         <div className="savebar sticky bottom-0 z-10 flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-line bg-surface-soft px-3 py-2.5 sm:px-4">
-          <p className="m-0 hidden min-w-0 flex-1 text-xs leading-relaxed text-ink-muted sm:block">{stagedCount} ช่วงที่เก็บแล้ว · TXT, SRT และ JSON จะใช้ข้อมูลหลังบันทึก</p>
-          <p className="m-0 min-w-0 flex-1 text-xs leading-relaxed text-ink-muted sm:hidden">{stagedCount} ช่วง · บันทึกก่อนดาวน์โหลด</p>
+          <p className="m-0 hidden min-w-0 flex-1 text-xs leading-relaxed text-ink-muted sm:block">{stagedCount} ช่วงที่แก้ไข · บันทึกเป็นฉบับร่างเพื่อเก็บ snapshot นี้ในเซสชัน</p>
+          <p className="m-0 min-w-0 flex-1 text-xs leading-relaxed text-ink-muted sm:hidden">{stagedCount} ช่วง · บันทึกเป็นฉบับร่าง</p>
           <div className="flex shrink-0 flex-wrap justify-end gap-2">
-            <Button className="min-h-9 px-3 text-xs" variant="secondary" type="button" onClick={onDiscardChanges} disabled={isSaving}>ยกเลิกทั้งหมด</Button>
-            <Button className="min-h-9 px-3 text-xs" variant="primary" type="button" onClick={onSave} disabled={!isDirty || isSaving || activeEdit !== null}>
-              {isSaving ? "กำลังบันทึก" : saveState.kind === "failed" ? "ลองบันทึกอีกครั้ง" : "บันทึกทั้งหมด"}
-            </Button>
+            <Button className="min-h-9 px-3 text-xs" variant="secondary" type="button" onClick={onDiscardChanges} disabled={isSaving}>ทิ้งข้อความที่แก้</Button>
+            <Button className="min-h-9 px-3 text-xs" variant="primary" type="button" onClick={onSaveDraft} disabled={!isDirty || isSaving}>บันทึกเป็นฉบับร่าง</Button>
           </div>
         </div>
+      ) : null}
+      {pendingSwitch ? (
+        <SessionDialog
+          title="มีข้อความที่ยังไม่ได้บันทึก"
+          description={`ก่อนเปลี่ยนไป ${pendingSwitch.label} เลือกบันทึกข้อความเป็นฉบับร่าง ทิ้งข้อความ หรืออยู่ต่อเพื่อแก้ไข`}
+          cancelLabel="อยู่ต่อ"
+          onCancel={() => onResolveSwitch("stay")}
+        >
+          <Button variant="secondary" type="button" onClick={() => onResolveSwitch("discard")}>ทิ้งข้อความ</Button>
+          <Button variant="primary" type="button" onClick={() => onResolveSwitch("save")}>บันทึกร่างแล้วเปลี่ยนฉบับ</Button>
+        </SessionDialog>
+      ) : null}
+      {isPreviewOpen && selectedSnapshotTranscript && selectedId ? (
+        <SessionDialog
+          title={`ตัวอย่าง ${exportFormat.toUpperCase()} · ${selectedLabel ?? "ฉบับที่เลือก"}`}
+          description="ตัวอย่างนี้มาจาก snapshot ของฉบับที่เลือก และจะแสดงก่อนดาวน์โหลด"
+          cancelLabel="ปิดตัวอย่าง"
+          onCancel={() => setIsPreviewOpen(false)}
+          body={(
+            <div className="grid min-w-0 gap-3">
+              <label className="grid gap-1 text-xs font-semibold text-ink" htmlFor="transcript-export-format">
+                รูปแบบตัวอย่าง
+                <Select
+                  id="transcript-export-format"
+                  aria-label="รูปแบบตัวอย่าง"
+                  data-dialog-initial-focus
+                  className="min-h-10 w-full px-3 text-sm"
+                  value={exportFormat}
+                  onChange={(event) => setExportFormat(event.currentTarget.value as TranscriptExportFormat)}
+                >
+                  {TRANSCRIPT_EXPORT_FORMATS.map((format) => <option key={format} value={format}>{format.toUpperCase()}</option>)}
+                </Select>
+              </label>
+              <pre
+                className="m-0 max-h-[56dvh] min-w-0 overflow-auto overscroll-contain rounded-lg border border-line bg-surface-soft p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words text-ink"
+                aria-label={`เนื้อหาตัวอย่าง ${exportFormat.toUpperCase()}`}
+                data-testid="transcript-export-preview"
+              >{serializeTranscript(selectedSnapshotTranscript, exportFormat)}</pre>
+              {isDirty ? <p className="m-0 text-xs text-ink-muted" role="status">ตัวอย่างนี้ใช้ snapshot ที่เลือก ข้อความที่ยังไม่บันทึกจะไม่รวมในการดาวน์โหลด</p> : null}
+            </div>
+          )}
+        >
+          <Button className="min-h-10 w-full sm:w-auto" variant="primary" type="button" onClick={downloadSelectedRevision} disabled={isDirty || isSaving || pendingSwitch !== null}>
+            ดาวน์โหลด {exportFormat.toUpperCase()}
+          </Button>
+        </SessionDialog>
       ) : null}
     </section>
   );

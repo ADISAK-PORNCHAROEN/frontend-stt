@@ -89,9 +89,9 @@ Do not bring back the old dark navy and amber palette. Keep the blue accent purp
 
 ## Layout
 
-Center the page in a shell capped at 1380px. Use 32px outer insets on desktop and 16px on small screens. Keep only the product mark in the compact header. Show service status beside file selection while it is checking or unavailable, with a retry action for unavailable service; omit the healthy status indicator.
+Fill the viewport width without a max-width shell. Use 32px horizontal insets on desktop and 16px on small screens. Keep only the product mark in the compact header. Show service status beside file selection while it is checking or unavailable, with a retry action for unavailable service; omit the healthy status indicator.
 
-Keep the header and footer at the viewport edges on supported desktop and mobile sizes. The start screen balances its file drop area with concise workflow and retention information. After a file is chosen, align its name, replacement action, model, and start control in one toolbar. During processing, keep the original player and a compact status panel visible together. After success, place the original media on the left and a wider transcript workspace on the right at desktop sizes; stack the media above the transcript on mobile. Keep the page within one viewport and make the transcript list the only scroll region in every completed state. Verify the layout at 1440×1000, 1280×720, and 390×844.
+Keep the header at the top and the footer at the bottom of the viewport on supported desktop and mobile sizes. Prevent document scrolling in workspace states. The start screen balances its file drop area with concise workflow and retention information. After a file is chosen, align its name, replacement action, model, and start control in one toolbar. Keep the model selector and start action together in that row on mobile and desktop. During processing, keep the original player and a compact status panel visible together. After success, place the original media on the left and a wider transcript workspace on the right at desktop sizes; stack the media above the transcript on mobile. Keep the page within one viewport and make the transcript list the only scroll region in every completed state. Verify the layout at 1440×1000, 1280×720, and 390×844.
 
 Use 4px spacing increments. Panels use 16px corners and a restrained shadow. The transcript panel uses internal scrolling at desktop and mobile sizes. Keep editing and save controls in view while transcript rows scroll.
 
@@ -101,8 +101,10 @@ Use 4px spacing increments. Panels use 16px corners and a restrained shadow. The
 - Keep the upload target compact and dashed, with file types and retention information near the action.
 - Use a dark viewport for video inside the light media frame.
 - Pair each timestamp with a thin rail and point. Mark the active row with a pale-blue fill, blue leading edge, rail, and point.
-- Keep the original ASR transcript immutable. Let the owner edit existing segment text while preserving IDs, order, times, and structure; saving and viewing the original are explicit actions.
-- Let the timestamp control replay its segment with up to 0.5 seconds of context on either side, then stop. Disable JSON/TXT/SRT downloads until the current edits are saved.
+- Keep the original ASR transcript immutable. Let the owner edit existing segment text while preserving IDs, order, times, and structure; each saved draft is a new revision, and committing a selected revision makes it latest reviewed.
+- Let the timestamp control replay its segment with up to 0.5 seconds of context on either side, then stop. Let the user preview JSON/TXT/SRT for the selected original, draft, or latest reviewed snapshot and download only that preview. Exclude unsaved text and disable download while edits are dirty or saving.
+- Use a confirmation dialog for file replacement and clear. Name the replacement candidate and preserve the current session when the user cancels.
+- Show an approximate remaining time only while the current job's progress is advancing with enough recent samples. Hide it while queued or when progress is missing, insufficient, stale, or stalled; label it as a progress-based estimate.
 - Show Turbo and large-v3 before starting a job, with the service-configured default selected.
 - Preserve visible keyboard focus and reduced-motion support.
 

@@ -12,7 +12,7 @@ The project owner is the only user in the first version. They open the web app o
 
 ## Product Purpose
 
-The product lets the owner transcribe an audio or video file and review the result against playback of the original file. Success means the owner can select a Whisper model, replay timestamped segments, correct segment text, save the review, view the original ASR transcript, and download the latest saved transcript as JSON, TXT, or SRT.
+The product lets the owner transcribe an audio or video file and review the result against playback of the original file. Success means the owner can select a Whisper model, replay timestamped segments, keep immutable transcript revisions, preview a selected revision as JSON, TXT, or SRT, and download exactly that preview.
 
 ## Positioning
 
@@ -35,8 +35,13 @@ The frontend follows one transcription job at a time. The service keeps successf
 - The model selector offers Turbo and large-v3. Its initial value comes from the configured model returned by service readiness; the selected model is sent through the same-origin upload route.
 - Each timestamped segment can be replayed from up to 0.5 seconds before through up to 0.5 seconds after its bounds, then playback stops. The active segment is highlighted and followed during playback.
 - The owner may edit text for existing segments only. Saving sends the complete segment ID/text set; order, IDs, times, and segment structure remain unchanged. The original ASR transcript remains available as an immutable view.
-- JSON/TXT/SRT downloads use the latest saved transcript. Downloads are disabled while edits are unsaved or saving. Review drafts live only in the current page session; there is no job history or durable transcript library.
+- The original transcript is immutable. Each saved draft is a new session revision; committing a selected revision uses the existing same-origin transcript API and updates the service's latest reviewed result.
+- The owner may select the original, a draft, or the latest reviewed revision, preview JSON/TXT/SRT, and download only that revision in the selected format. An unsaved edit is excluded from both preview and download, and downloads are disabled while the edit is dirty or saving.
+- Revision history and draft snapshots exist only in the current page session. Do not add a revision-history API or durable browser storage; the service remains the source of the original and latest reviewed artifacts.
 - The user reviews a selected file and explicitly starts transcription. The interface is desktop-first and must remain usable on mobile.
+- Selecting a replacement file opens a confirmation that names the candidate. Cancel preserves the current file and job state; confirmation replaces it and clears the prior file's session state. Clearing a selected file also requires confirmation.
+- Show an approximate remaining time only for the current job when its progress is advancing and there is enough recent progress to estimate. Hide it while queued, with insufficient or stalled progress, or without progress data; label it as a progress-based estimate rather than a service ETA.
+- Keep the header and footer at viewport edges and the page within one viewport. After a transcript is available, the transcript list is the only scroll region; the model selector and start control stay on one row at desktop and mobile sizes.
 - When the service is unavailable or a job fails, the interface explains the failure in user-facing language and lets the user submit the file again.
 - The service is loopback-only, has no authentication, and does not accept cross-origin browser requests. Its current API does not return the uploaded media for playback.
 - The user selected the Time Atlas visual direction for the first transcription workspace. Its coordinate marks and plotted points clarify time positions while familiar browser media controls and transcript reading remain primary.
@@ -52,5 +57,5 @@ The frontend follows one transcription job at a time. The service keeps successf
 - Keep the original media available for playback in the current browser session so the user can check the transcript against its source.
 - Show service status and failures clearly; do not imply a job completed when the service has not published its result.
 - Keep the first version local, single-user, and ephemeral.
-- Keep the original ASR transcript immutable. Let the owner edit text only, preserve segment IDs/order/times, and send one complete save through the same-origin API.
-- Keep review drafts in memory for the current page session. Require a successful save before downloads use edited text.
+- Keep the original ASR transcript immutable. Let the owner edit text only, preserve segment IDs/order/times, create a new snapshot for every saved draft, and commit a selected snapshot through the existing same-origin API.
+- Keep revision drafts in memory for the current page session. Preview and download only the selected immutable snapshot and format, with unsaved text excluded.

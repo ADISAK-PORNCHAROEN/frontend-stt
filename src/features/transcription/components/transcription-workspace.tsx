@@ -1,17 +1,20 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { Button, buttonClassName } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { MAX_FILE_DURATION_SECONDS } from "../constants";
 import { formatFileSize, formatMediaType } from "../format";
+import { formatEstimatedTime } from "../progress-estimate";
 import type { ServiceState, TranscriptSegment, WorkspaceSession } from "../types";
 import { useTranscriptionSession } from "../hooks/use-transcription-session";
+import { useProgressEstimate } from "../hooks/use-progress-estimate";
 import { useTranscriptReview } from "../hooks/use-transcript-review";
 import { FileDrop } from "./file-drop";
 import { MediaPlayer } from "./media-player";
 import { TranscriptPanel } from "./transcript-panel";
+import { SessionDialog } from "./session-dialog";
 
 const HOME_STEPS = [
   { marker: "1", title: "เลือกไฟล์", description: "เสียงหรือวิดีโอที่ต้องการถอดเสียง" },
@@ -43,6 +46,7 @@ type SucceededSession = Extract<WorkspaceSession, { kind: "succeeded" }>;
 type ActiveSession = Extract<WorkspaceSession, { kind: "submitting" | "queued" | "running" }>;
 
 type WorkspaceLayout = "work" | "review";
+type PendingMediaAction = { kind: "replace"; file: File } | { kind: "clear" };
 
 function WorkspaceBody({ primary, reference, layout = "work" }: { primary: ReactNode; reference: ReactNode; layout?: WorkspaceLayout }) {
   const gridLayout = layout === "review"
@@ -55,20 +59,6 @@ function WorkspaceBody({ primary, reference, layout = "work" }: { primary: React
         {primary}
         {reference}
       </div>
-    </div>
-  );
-}
-
-function DownloadActions({ jobId, disabled }: { jobId: SucceededSession["jobId"]; disabled: boolean }) {
-  return (
-    <div className="download-actions flex flex-wrap gap-1.5" aria-label="ดาวน์โหลดบทถอดเสียง">
-      {(["json", "txt", "srt"] as const).map((format) => {
-        const label = "ดาวน์โหลด " + format.toUpperCase();
-        const href = "/api/stt/jobs/" + jobId + "/result?format=" + format;
-        return disabled
-          ? <Button aria-label={label} className="min-h-9 px-3 text-xs uppercase" variant="secondary" type="button" key={format} disabled>{format}</Button>
-          : <a aria-label={label} className={buttonClassName("secondary", "min-h-9 px-3 text-xs uppercase no-underline")} href={href} key={format}>{format}</a>;
-      })}
     </div>
   );
 }
@@ -94,37 +84,31 @@ function SucceededWorkspace({
   const review = useTranscriptReview(session.jobId, session.transcript);
 
   useEffect(() => {
-    if (!review.isDirty && !review.isSaving) return;
+    if (!review.view.isDirty && !review.view.isSaving) return;
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = "";
     };
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [review.isDirty, review.isSaving]);
+  }, [review.view.isDirty, review.view.isSaving]);
 
   return (
     <aside className="workspace-side flex min-h-0 min-w-0 flex-col">
       <TranscriptPanel
-        transcript={review.transcript ?? session.transcript}
+        view={review.view}
         currentTime={currentTime}
-        isOriginal={review.isOriginal}
-        isDirty={review.isDirty}
-        isSaving={review.isSaving}
-        saveState={review.saveState}
-        originalState={review.originalState}
-        activeEdit={review.activeEdit}
-        downloadActions={<DownloadActions jobId={session.jobId} disabled={review.isDirty || review.isSaving} />}
         onReplay={onReplay}
         onBeginEdit={review.beginEdit}
         onEdit={review.updateActiveText}
         onStageEdit={review.stageActiveEdit}
         onCancelEdit={review.cancelActiveEdit}
         onDiscardChanges={review.discardChanges}
-        onViewOriginal={() => void review.viewOriginal()}
-        onViewLatest={review.viewLatest}
-        onSave={() => void review.saveChanges()}
-        stagedCount={review.stagedCount}
+        onSaveDraft={review.saveDraft}
+        onSelectRevision={review.selectRevision}
+        onResolveSwitch={review.resolveSwitch}
+        onRetryOriginal={review.retryOriginal}
+        onCommit={() => void review.commitSelected()}
       />
     </aside>
   );
@@ -167,6 +151,9 @@ function ReadinessPanel({ jobMessage }: { jobMessage: string | null }) {
 function ProgressPanel({ session, jobMessage }: { session: ActiveSession; jobMessage: string | null }) {
   const isUploading = session.kind === "submitting";
   const progress = isUploading ? session.uploadPercent : session.progressPercent;
+  const jobId = session.kind === "queued" || session.kind === "running" ? session.jobId : null;
+  const remainingSeconds = useProgressEstimate(jobId, session.kind === "running" && jobMessage === null ? "running" : "inactive", progress);
+  const remainingTime = remainingSeconds === null ? null : formatEstimatedTime(remainingSeconds);
   const label = isUploading
     ? "กำลังส่งไฟล์"
     : session.kind === "queued"
@@ -197,6 +184,12 @@ function ProgressPanel({ session, jobMessage }: { session: ActiveSession; jobMes
         value={progress}
         max={100}
       />
+      {remainingTime ? (
+        <div className="rounded-lg border border-accent-soft bg-accent-soft/50 px-3 py-2" aria-label={`เวลาที่เหลือโดยประมาณ ${remainingTime} คำนวณจากความคืบหน้าของงานนี้`} data-testid="remaining-time-estimate" role="status" tabIndex={0}>
+          <p className="m-0 text-sm font-semibold text-ink">เวลาที่เหลือโดยประมาณ: {remainingTime}</p>
+          <p className="m-0 mt-0.5 text-xs leading-relaxed text-ink-muted">คำนวณจากความคืบหน้าของงานนี้</p>
+        </div>
+      ) : null}
       {jobMessage ? <p className="m-0 rounded-lg bg-danger-soft px-3 py-2 text-xs leading-relaxed text-danger" role="alert">เกิดปัญหาในการติดตามงาน: {jobMessage}</p> : null}
       <ol className="m-0 grid list-none gap-2 border-t border-line pt-3 sm:gap-3">
         {steps.map(({ label: stepLabel, description, active, complete }) => (
@@ -226,10 +219,13 @@ function FailedPanel({ session, onRetry }: { session: Extract<WorkspaceSession, 
 
 export function TranscriptionWorkspace() {
   const [currentTime, setCurrentTime] = useState(0);
+  const [pendingMediaAction, setPendingMediaAction] = useState<PendingMediaAction | null>(null);
   const playerRef = useRef<HTMLMediaElement>(null);
   const replayWindowRef = useRef<{ start: number; end: number } | null>(null);
   const sourceTitleRef = useRef<HTMLHeadingElement>(null);
+  const homeTitleRef = useRef<HTMLHeadingElement>(null);
   const startButtonRef = useRef<HTMLButtonElement>(null);
+  const focusHomeAfterClear = useRef(false);
   const {
     session,
     media,
@@ -249,12 +245,19 @@ export function TranscriptionWorkspace() {
   const selectedMediaUrl = session.kind === "selected" ? session.url : null;
   const isHome = media === null;
   const canReplaceFile = session.kind === "selected" || session.kind === "failed" || session.kind === "succeeded";
+  const cancelPendingMediaAction = useCallback(() => setPendingMediaAction(null), []);
 
   useEffect(() => {
     if (!selectedMediaUrl) return;
     const nextFocusTarget = serviceState === "ready" ? startButtonRef.current : sourceTitleRef.current;
     nextFocusTarget?.focus();
   }, [selectedMediaUrl, serviceState]);
+
+  useEffect(() => {
+    if (!isHome || !focusHomeAfterClear.current) return;
+    focusHomeAfterClear.current = false;
+    homeTitleRef.current?.focus({ preventScroll: true });
+  }, [isHome]);
 
   function replaySegment(segment: TranscriptSegment) {
     const player = playerRef.current;
@@ -291,13 +294,29 @@ export function TranscriptionWorkspace() {
   }
 
   function handleSelectFile(file: File) {
+    if (media !== null) {
+      setPendingMediaAction({ kind: "replace", file });
+      return;
+    }
     replayWindowRef.current = null;
     selectFile(file);
     setCurrentTime(0);
   }
 
+  function handleConfirmMediaAction() {
+    if (!pendingMediaAction) return;
+    replayWindowRef.current = null;
+    if (pendingMediaAction.kind === "replace") selectFile(pendingMediaAction.file);
+    else {
+      focusHomeAfterClear.current = true;
+      clearSession();
+    }
+    setCurrentTime(0);
+    setPendingMediaAction(null);
+  }
+
   return (
-    <main className="site-shell mx-auto flex h-dvh min-h-0 w-full max-w-[1380px] flex-col overflow-hidden px-4 md:px-8">
+    <main className="site-shell flex h-dvh min-h-0 w-full flex-col overflow-hidden px-4 md:px-8">
       <header className="topbar sticky top-0 z-20 flex min-h-14 shrink-0 items-center justify-between border-b border-line bg-canvas sm:min-h-[68px]">
         <Link className="wordmark inline-flex items-center gap-2.5 rounded-sm text-xs font-bold tracking-[0.13em] text-ink no-underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent sm:gap-3 sm:text-sm" href="/" aria-label="Time Atlas หน้าแรก">
           <span className="wordmark-mark relative grid size-7 place-items-center rounded-lg bg-blue-100" aria-hidden="true">
@@ -314,7 +333,7 @@ export function TranscriptionWorkspace() {
           <section className="home-screen grid min-h-0 w-full items-center gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(330px,0.8fr)] lg:gap-6" aria-label="เริ่มต้น">
             <div className="home-main grid min-w-0 gap-4 sm:gap-5">
               <div className="home-copy page-intro">
-                <h1 id="page-title" className="m-0 text-[clamp(2rem,3.6vw,3rem)] font-semibold leading-[1.16] tracking-[-0.025em] text-ink">ฟังทุกช่วงเวลา<span className="block text-accent">อ่านทุกถ้อยคำ</span></h1>
+                <h1 id="page-title" ref={homeTitleRef} tabIndex={-1} className="m-0 text-[clamp(2rem,3.6vw,3rem)] font-semibold leading-[1.16] tracking-[-0.025em] text-ink">ฟังทุกช่วงเวลา<span className="block text-accent">อ่านทุกถ้อยคำ</span></h1>
                 <p className="m-0 mt-3 max-w-[60ch] text-sm leading-relaxed text-ink-muted sm:text-base">เลือกไฟล์เสียงหรือวิดีโอ แล้วกลับไปฟังทุกช่วงจากบทถอดเสียงได้ทันที</p>
               </div>
 
@@ -363,7 +382,7 @@ export function TranscriptionWorkspace() {
               </div>
               {canReplaceFile ? (
                 <div className="source-actions col-span-2 row-start-2 flex items-center justify-end gap-2 sm:col-span-1 sm:col-start-2 sm:row-start-1 lg:col-start-2 lg:row-start-1">
-                  <Button className="min-h-10 shrink-0 px-2 text-xs" variant="text" type="button" onClick={() => { replayWindowRef.current = null; clearSession(); setCurrentTime(0); }}>{session.kind === "selected" ? "ล้างไฟล์" : "เลือกไฟล์ใหม่"}</Button>
+                  <Button className="min-h-10 shrink-0 px-2 text-xs" variant="text" type="button" onClick={() => setPendingMediaAction({ kind: "clear" })}>ล้างไฟล์</Button>
                   <FileDrop compact disabled={false} error={selectionError} onSelect={handleSelectFile} onInvalid={setSelectionError} />
                 </div>
               ) : null}
@@ -415,7 +434,7 @@ export function TranscriptionWorkspace() {
                   compactPreview={session.kind === "selected" || session.kind === "succeeded"}
                   headerActions={session.kind === "succeeded" ? (
                     <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
-                      <Button className="min-h-9 px-2 text-xs" variant="text" type="button" onClick={() => { replayWindowRef.current = null; clearSession(); setCurrentTime(0); }}>ล้างไฟล์</Button>
+                      <Button className="min-h-9 px-2 text-xs" variant="text" type="button" onClick={() => setPendingMediaAction({ kind: "clear" })}>ล้างไฟล์</Button>
                       <FileDrop compact compactLabel="เลือกไฟล์ใหม่" disabled={false} error={selectionError} onSelect={handleSelectFile} onInvalid={setSelectionError} />
                     </div>
                   ) : undefined}
@@ -440,6 +459,20 @@ export function TranscriptionWorkspace() {
         <p className="m-0 min-w-0 flex-1 sm:hidden">ไฟล์ไม่เกิน 1 GiB · ยาว 2 ชม. · คิวรอ 10 งาน</p>
         <p className="m-0 shrink-0 font-mono tracking-[0.08em] text-accent">TIME ATLAS</p>
       </footer>
+      {pendingMediaAction ? (
+        <SessionDialog
+          title={pendingMediaAction.kind === "replace" ? "ยืนยันการแทนที่ไฟล์" : "ยืนยันการล้างไฟล์"}
+          description={pendingMediaAction.kind === "replace"
+            ? `ไฟล์ ${pendingMediaAction.file.name} จะเข้ามาแทนที่ไฟล์ปัจจุบันและเริ่มเซสชันใหม่`
+            : `ยืนยันล้างไฟล์ ${media?.file.name ?? ""} และข้อมูลในเซสชันนี้`}
+          cancelLabel="ยกเลิก"
+          onCancel={cancelPendingMediaAction}
+        >
+          <Button variant="primary" type="button" onClick={handleConfirmMediaAction}>
+            {pendingMediaAction.kind === "replace" ? "แทนที่ไฟล์" : "ล้างไฟล์"}
+          </Button>
+        </SessionDialog>
+      ) : null}
     </main>
   );
 }

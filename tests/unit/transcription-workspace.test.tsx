@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TranscriptionWorkspace } from "@/features/transcription/components/transcription-workspace";
+import { initialReviewState, reviewView, type ReviewView } from "@/features/transcription/review-state";
 import { isJobId, type JobId, type Transcript, type WorkspaceSession } from "@/features/transcription/types";
 
 const mocks = vi.hoisted(() => ({
@@ -54,25 +55,19 @@ function succeededSession(): WorkspaceSession {
   return { kind: "succeeded", file, url: "blob:synthetic", durationSeconds: 28, jobId: JOB_ID, transcript };
 }
 
-function reviewState(overrides: Record<string, unknown> = {}) {
+function reviewState(overrides: { view?: Partial<ReviewView> } = {}) {
   return {
-    transcript,
-    isOriginal: false,
-    isDirty: false,
-    isSaving: false,
-    saveState: { kind: "idle" },
-    originalState: { kind: "unloaded" },
-    activeEdit: null,
-    stagedCount: 0,
+    view: { ...reviewView(initialReviewState(transcript)), ...overrides.view },
     beginEdit: vi.fn(),
     updateActiveText: vi.fn(),
     stageActiveEdit: vi.fn(),
     cancelActiveEdit: vi.fn(),
     discardChanges: vi.fn(),
-    viewOriginal: vi.fn(),
-    viewLatest: vi.fn(),
-    saveChanges: vi.fn(),
-    ...overrides,
+    saveDraft: vi.fn(),
+    selectRevision: vi.fn(),
+    resolveSwitch: vi.fn(),
+    retryOriginal: vi.fn(),
+    commitSelected: vi.fn(),
   };
 }
 
@@ -84,6 +79,8 @@ describe("TranscriptionWorkspace", () => {
     Object.defineProperty(Element.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
     Object.defineProperty(HTMLMediaElement.prototype, "play", { configurable: true, value: vi.fn().mockResolvedValue(undefined) });
     Object.defineProperty(HTMLMediaElement.prototype, "pause", { configurable: true, value: vi.fn() });
+    Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true, value() { this.setAttribute("open", ""); } });
+    Object.defineProperty(HTMLDialogElement.prototype, "close", { configurable: true, value() { this.removeAttribute("open"); } });
   });
 
   it("renders the home state, shows checking status, and retries an unavailable service", () => {
@@ -122,8 +119,20 @@ describe("TranscriptionWorkspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "เริ่มถอดเสียง" }));
     expect(selected.startTranscription).toHaveBeenCalledOnce();
     fireEvent.change(screen.getByLabelText("เปลี่ยนไฟล์"), { target: { files: [new File(["another"], "again.mp3", { type: "audio/mpeg" })] } });
+    const replaceDialog = screen.getByRole("dialog", { name: "ยืนยันการแทนที่ไฟล์" });
+    expect(replaceDialog).toHaveTextContent("again.mp3");
+    expect(selected.selectFile).not.toHaveBeenCalled();
+    fireEvent.click(within(replaceDialog).getByRole("button", { name: "ยกเลิก" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(selected.selectFile).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText("เปลี่ยนไฟล์"), { target: { files: [new File(["another"], "again.mp3", { type: "audio/mpeg" })] } });
+    fireEvent.click(within(screen.getByRole("dialog", { name: "ยืนยันการแทนที่ไฟล์" })).getByRole("button", { name: "แทนที่ไฟล์" }));
     expect(selected.selectFile).toHaveBeenCalledWith(expect.objectContaining({ name: "again.mp3" }));
     fireEvent.click(screen.getByRole("button", { name: "ล้างไฟล์" }));
+    const clearDialog = screen.getByRole("dialog", { name: "ยืนยันการล้างไฟล์" });
+    expect(selected.clearSession).not.toHaveBeenCalled();
+    fireEvent.click(within(clearDialog).getByRole("button", { name: "ล้างไฟล์" }));
     expect(selected.clearSession).toHaveBeenCalledOnce();
 
     const unavailable = sessionState({ session: selectedSession(), media: selectedSession(), serviceState: "unavailable", selectedModel: null });
@@ -227,33 +236,36 @@ describe("TranscriptionWorkspace", () => {
     const view = render(<TranscriptionWorkspace />);
     const workspaceGrid = document.querySelector(".workspace-grid");
     expect(Array.from(workspaceGrid?.children ?? []).map((element) => element.className.split(" ")[0])).toEqual(["workspace-main", "workspace-side"]);
-    expect(screen.getByRole("link", { name: "ดาวน์โหลด TXT" })).toHaveAttribute("href", `/api/stt/jobs/${JOB_ID}/result?format=txt`);
-    const transcriptPanel = screen.getByRole("region", { name: "บทถอดเสียง" });
-    expect(within(transcriptPanel).getByText(/ถอดเสียงเสร็จแล้ว/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "ตัวอย่างและส่งออก" }));
+    expect(screen.getByRole("dialog", { name: /ตัวอย่าง JSON · ฉบับล่าสุดที่ตรวจแล้ว/ })).toBeInTheDocument();
+    expect(screen.getByTestId("transcript-export-preview")).toHaveTextContent('"duration_seconds": 4');
+    const transcriptPanel = screen.getByRole("region", { name: "ฉบับล่าสุดที่ตรวจแล้ว" });
+    expect(within(transcriptPanel).getByText(/ฉบับล่าสุด · 2 ช่วง/)).toBeInTheDocument();
     expect(mocks.useTranscriptReview).toHaveBeenCalledWith(JOB_ID, transcript);
     const succeededAudio = screen.getByLabelText("เล่นไฟล์เสียง sample.wav");
     Object.defineProperty(succeededAudio, "duration", { configurable: true, value: 28 });
     fireEvent.loadedMetadata(succeededAudio);
     expect(sessionHooks.updateDuration).toHaveBeenCalledWith("blob:synthetic", 28);
-    fireEvent.click(screen.getByRole("button", { name: "ดูต้นฉบับ" }));
-    expect(cleanReview.viewOriginal).toHaveBeenCalledOnce();
-    const originalReview = reviewState({ isOriginal: true });
+    fireEvent.change(screen.getByRole("combobox", { name: "เลือกฉบับบทถอดเสียง" }), { target: { value: "original" } });
+    expect(cleanReview.selectRevision).toHaveBeenCalledWith("original");
+    const originalReview = reviewState({ view: { isOriginal: true, isLatest: false, currentId: "original", selectedId: "original", selectedKind: "original", selectedLabel: "ต้นฉบับ ASR" } });
     mocks.useTranscriptReview.mockReturnValue(originalReview);
     view.rerender(<TranscriptionWorkspace />);
-    fireEvent.click(screen.getByRole("button", { name: "กลับไปฉบับแก้ไข" }));
-    expect(originalReview.viewLatest).toHaveBeenCalledOnce();
-    const stagedReview = reviewState({ isDirty: true });
+    fireEvent.change(screen.getByRole("combobox", { name: "เลือกฉบับบทถอดเสียง" }), { target: { value: "latest-0" } });
+    expect(originalReview.selectRevision).toHaveBeenCalledWith("latest-0");
+    const stagedReview = reviewState({ view: { isDirty: true } });
     mocks.useTranscriptReview.mockReturnValue(stagedReview);
     view.rerender(<TranscriptionWorkspace />);
-    fireEvent.click(screen.getByRole("button", { name: "บันทึกทั้งหมด" }));
-    expect(stagedReview.saveChanges).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: "บันทึกเป็นฉบับร่าง" }));
+    expect(stagedReview.saveDraft).toHaveBeenCalledOnce();
     view.unmount();
 
-    const dirtyReview = reviewState({ isDirty: true, transcript: null });
+    const dirtyReview = reviewState({ view: { isDirty: true } });
     mocks.useTranscriptReview.mockReturnValue(dirtyReview);
     const dirtyView = render(<TranscriptionWorkspace />);
-    expect(screen.getByRole("button", { name: "ดาวน์โหลด SRT" })).toBeDisabled();
-    expect(screen.getAllByRole("status").some((status) => status.textContent?.includes("มีการแก้ไขที่ยังไม่ได้บันทึก"))).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "ตัวอย่างและส่งออก" }));
+    expect(screen.getByRole("button", { name: "ดาวน์โหลด JSON" })).toBeDisabled();
+    expect(screen.getAllByRole("status").some((status) => status.textContent?.includes("มีข้อความที่ยังไม่ได้บันทึกเป็นฉบับร่าง"))).toBe(true);
     const unload = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(unload);
     expect(unload.defaultPrevented).toBe(true);
@@ -264,8 +276,9 @@ describe("TranscriptionWorkspace", () => {
     expect(afterCleanup.defaultPrevented).toBe(false);
     dirtyView.unmount();
 
-    mocks.useTranscriptReview.mockReturnValue(reviewState({ isSaving: true }));
+    mocks.useTranscriptReview.mockReturnValue(reviewState({ view: { isSaving: true } }));
     render(<TranscriptionWorkspace />);
+    fireEvent.click(screen.getByRole("button", { name: "ตัวอย่างและส่งออก" }));
     expect(screen.getByRole("button", { name: "ดาวน์โหลด JSON" })).toBeDisabled();
   });
 });

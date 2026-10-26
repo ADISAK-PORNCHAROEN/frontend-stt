@@ -6,7 +6,7 @@ export type FixtureScenario =
   | { kind: "ready"; defaultModel?: WhisperModel }
   | { kind: "unavailable" }
   | { kind: "reject"; code: "queue_full" | "invalid_input" | "unsupported_format" }
-  | { kind: "job"; outcome: "success" | "processing_failure" | "expired" | "result_unavailable" | "model_load_failure"; holdSubmission?: boolean; defaultModel?: WhisperModel; failTranscriptSaveOnce?: boolean };
+  | { kind: "job"; outcome: "success" | "processing_failure" | "expired" | "result_unavailable" | "model_load_failure"; holdSubmission?: boolean; defaultModel?: WhisperModel; failTranscriptSaveOnce?: boolean; progressSequence?: readonly number[] };
 
 export type UploadObservation = Readonly<{
   bytesReceived: number;
@@ -75,6 +75,12 @@ export type SttFixture = {
   waitForUploadBytes(): Promise<void>;
   close(): Promise<void>;
 };
+
+function finalStage(scenario: FixtureScenario): number {
+  return scenario.kind === "job" && scenario.progressSequence
+    ? scenario.progressSequence.length + 1
+    : 2;
+}
 
 export async function startSttFixture(): Promise<SttFixture> {
   let scenario: FixtureScenario = { kind: "ready" };
@@ -146,7 +152,7 @@ export async function startSttFixture(): Promise<SttFixture> {
 
         if (scenario.kind === "unavailable") return respondUnavailable(response);
         if (!accepted || transcriptMatch[1] !== JOB_ID) return json(response, 404, { error: { code: "not_found", message: "Job not found" } });
-        if (scenario.kind !== "job" || stage < 2 || scenario.outcome === "expired") {
+        if (scenario.kind !== "job" || stage < finalStage(scenario) || scenario.outcome === "expired") {
           return json(response, 409, { error: { code: "result_unavailable", message: "Result not ready" } });
         }
         if (failNextTranscriptSave) {
@@ -178,7 +184,10 @@ export async function startSttFixture(): Promise<SttFixture> {
       if (scenario.kind !== "job") return json(response, 404, { error: { code: "not_found", message: "Job not found" } });
       if (scenario.outcome === "expired" && stage > 0) return json(response, 404, { error: { code: "not_found", message: "Job expired" } });
       if (stage === 0) return json(response, 200, { id: JOB_ID, status: "queued", progress_percent: 0 });
-      if (stage === 1) return json(response, 200, { id: JOB_ID, status: "running", progress_percent: 47 });
+      if (scenario.progressSequence && stage <= scenario.progressSequence.length) {
+        return json(response, 200, { id: JOB_ID, status: "running", progress_percent: scenario.progressSequence[stage - 1] });
+      }
+      if (!scenario.progressSequence && stage === 1) return json(response, 200, { id: JOB_ID, status: "running", progress_percent: 47 });
         if (scenario.outcome === "model_load_failure" && submittedModel === "large-v3") {
           return json(response, 200, { id: JOB_ID, status: "failed", progress_percent: 100, error: "model_load_failed", error_message: "The requested Whisper model could not be loaded." });
         }
@@ -195,7 +204,7 @@ export async function startSttFixture(): Promise<SttFixture> {
       if (!accepted || resultMatch[1] !== JOB_ID || (scenario.kind === "job" && scenario.outcome === "expired")) {
         return json(response, 404, { error: { code: "not_found", message: "Result expired" } });
       }
-      if (scenario.kind !== "job" || scenario.outcome === "result_unavailable" || stage < 2) {
+      if (scenario.kind !== "job" || scenario.outcome === "result_unavailable" || stage < finalStage(scenario)) {
         return json(response, 409, { error: { code: "result_unavailable", message: "Result not ready" } });
       }
       if (scenario.outcome === "processing_failure") {
@@ -243,7 +252,7 @@ export async function startSttFixture(): Promise<SttFixture> {
       uploadWaiters.length = 0;
     },
     advance() {
-      stage = Math.min(stage + 1, 2);
+      stage = Math.min(stage + 1, finalStage(scenario));
     },
     releaseSubmission() {
       pendingSubmission?.();
