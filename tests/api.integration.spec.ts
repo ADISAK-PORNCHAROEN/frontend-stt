@@ -133,6 +133,70 @@ test("#10 saves a complete text-only transcript once and serves immutable origin
   expect(srtText).toContain("00:00:02,000 --> 00:00:04,000\nประโยคที่สองที่แก้ไข");
 });
 
+test("#22 commits successive selected revision snapshots through the existing same-origin PUT and preserves original", async ({ app, stt }) => {
+  stt.reset({ kind: "job", outcome: "success" });
+  expect((await submitFixtureFile(app.origin)).status).toBe(202);
+  stt.advance();
+  stt.advance();
+  const jobId = "0123456789abcdef0123456789abcdef";
+  const resultUrl = `${app.origin}/api/stt/jobs/${jobId}/result?format=`;
+  const transcriptUrl = `${app.origin}/api/stt/jobs/${jobId}/transcript`;
+  const originalResponse = await fetch(`${resultUrl}original-json`);
+  const originalSegments = (await originalResponse.json()).segments;
+  const commits = ["ฉบับร่างหนึ่ง", "ฉบับร่างสอง"].map((prefix) => Array.from({ length: 14 }, (_, index) => ({
+    id: index + 1,
+    text: index === 0 ? prefix : `ช่วงเสียงภาษาไทยลำดับที่ ${index + 1} มีเวลาเริ่มและเวลาจบที่กำหนดไว้แน่นอน`,
+  })));
+
+  for (const segments of commits) {
+    const response = await fetch(transcriptUrl, {
+      method: "PUT",
+      headers: { Origin: app.origin, "Content-Type": "application/json" },
+      body: JSON.stringify({ segments }),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ status: "saved" });
+  }
+
+  const latest = await fetch(`${resultUrl}json`);
+  expect((await latest.json()).segments[0]).toMatchObject({ id: 1, text: "ฉบับร่างสอง" });
+  const originalAfter = await fetch(`${resultUrl}original-json`);
+  expect((await originalAfter.json()).segments).toEqual(originalSegments);
+  expect(stt.saves()).toHaveLength(2);
+  expect(stt.saves().map(({ payload }) => (payload as { segments: unknown[] }).segments[0])).toEqual([
+    { id: 1, text: "ฉบับร่างหนึ่ง" },
+    { id: 1, text: "ฉบับร่างสอง" },
+  ]);
+});
+
+test("#23 keeps the selected-revision preview inputs on the established original and latest API contract", async ({ app, stt }) => {
+  stt.reset({ kind: "job", outcome: "success" });
+  expect((await submitFixtureFile(app.origin)).status).toBe(202);
+  stt.advance();
+  stt.advance();
+  const jobId = "0123456789abcdef0123456789abcdef";
+  const base = `${app.origin}/api/stt/jobs/${jobId}/result?format=`;
+
+  const [originalResponse, latestResponse, txtResponse, srtResponse] = await Promise.all([
+    fetch(`${base}original-json`),
+    fetch(`${base}json`),
+    fetch(`${base}txt`),
+    fetch(`${base}srt`),
+  ]);
+  expect(originalResponse.status).toBe(200);
+  expect(latestResponse.status).toBe(200);
+  const originalPayload = await originalResponse.json();
+  const latestPayload = await latestResponse.json();
+  expect(originalPayload.segments[0]).toMatchObject({ id: 1, start: 0, end: 2 });
+  expect(latestPayload.segments[0]).toMatchObject({ id: 1, start: 0, end: 2 });
+  expect(await txtResponse.text()).toContain("ช่วงเสียงภาษาไทยลำดับที่ 1 มีเวลาเริ่มและเวลาจบที่กำหนดไว้แน่นอน");
+  expect(await srtResponse.text()).toContain("00:00:00,000 --> 00:00:02,000");
+
+  const history = await fetch(`${app.origin}/api/stt/jobs/${jobId}/revisions`);
+  expect(history.status).toBe(404);
+  expect(stt.saves()).toHaveLength(0);
+});
+
 test("#10 rejects cross-origin transcript saves and preserves drafts at the API boundary after a failed save", async ({ app, stt }) => {
   stt.reset({ kind: "job", outcome: "success", failTranscriptSaveOnce: true });
   expect((await submitFixtureFile(app.origin)).status).toBe(202);

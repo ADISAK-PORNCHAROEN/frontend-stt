@@ -1,159 +1,115 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import { getOriginalTranscript, saveTranscript } from "../api";
 import type { JobId, Transcript, TranscriptSegment } from "../types";
+import { ORIGINAL_REVISION_ID, initialReviewState, isReviewDirty, reviewReducer, reviewView } from "../review-state";
+import type { SwitchDecision } from "../review-state";
 
-type OriginalState =
-  | { kind: "unloaded" }
-  | { kind: "loading" }
-  | { kind: "loaded"; transcript: Transcript }
-  | { kind: "failed"; message: string };
-
-type SaveState = { kind: "idle" } | { kind: "saving" } | { kind: "saved" } | { kind: "failed"; message: string };
-type ActiveEdit = { segmentId: number; text: string };
+const ORIGINAL_LOAD_ERROR = "โหลดบทถอดเสียงต้นฉบับไม่สำเร็จ กรุณาลองอีกครั้ง";
+const COMMIT_ERROR = "ตั้งฉบับล่าสุดไม่สำเร็จ กรุณาลองอีกครั้ง";
 
 export function useTranscriptReview(jobId: JobId | null, initialTranscript: Transcript | null) {
-  const [savedTranscript, setSavedTranscript] = useState(initialTranscript);
-  const [stagedTexts, setStagedTexts] = useState<Record<number, string>>({});
-  const [activeEdit, setActiveEdit] = useState<ActiveEdit | null>(null);
-  const [originalState, setOriginalState] = useState<OriginalState>({ kind: "unloaded" });
-  const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
-  const [showingOriginal, setShowingOriginal] = useState(false);
+  const [state, dispatch] = useReducer(
+    reviewReducer,
+    initialTranscript,
+    (transcript) => transcript ? initialReviewState(transcript) : null,
+  );
   const requestIdentity = useRef(0);
+  const commitRequestIdentity = useRef(0);
+  const commitGate = useRef<number | null>(null);
+  const selectedId = state?.selectedId ?? null;
+  const originalStateKind = state?.originalState.kind ?? "unloaded";
 
-  useEffect(() => {
-    const identity = ++requestIdentity.current;
-    return () => {
-      if (requestIdentity.current === identity) requestIdentity.current += 1;
-    };
+  useEffect(() => () => {
+    requestIdentity.current += 1;
+    commitGate.current = null;
   }, []);
 
-  const isSaving = saveState.kind === "saving";
-  const hasStagedChanges = savedTranscript?.segments.some((segment) => stagedTexts[segment.id] !== undefined) ?? false;
-  const stagedCount = Object.keys(stagedTexts).length;
-  const activeSavedText = activeEdit && savedTranscript?.segments.find((segment) => segment.id === activeEdit.segmentId)?.text;
-  const activeBaseText = activeEdit ? stagedTexts[activeEdit.segmentId] ?? activeSavedText : undefined;
-  const isDirty = hasStagedChanges || (activeEdit !== null && activeEdit.text !== activeBaseText);
-  const latestDraft = useMemo<Transcript | null>(() => {
-    if (!savedTranscript) return null;
-    const segments = savedTranscript.segments.map((segment) => ({
-      ...segment,
-      text: activeEdit?.segmentId === segment.id
-        ? activeEdit.text
-        : stagedTexts[segment.id] ?? segment.text,
-    }));
-    return { ...savedTranscript, segments, text: segments.map(({ text }) => text.trim()).join("\n") };
-  }, [activeEdit, savedTranscript, stagedTexts]);
-  const transcript = showingOriginal && originalState.kind === "loaded"
-    ? originalState.transcript
-    : latestDraft;
+  useEffect(() => {
+    if (!jobId || selectedId !== ORIGINAL_REVISION_ID || originalStateKind !== "unloaded") return;
+    const requestId = ++requestIdentity.current;
+    dispatch({ type: "original-load-start", requestId });
+    void getOriginalTranscript(jobId).then((transcript) => {
+      if (requestIdentity.current === requestId) dispatch({ type: "original-load-success", requestId, transcript });
+    }).catch(() => {
+      if (requestIdentity.current === requestId) dispatch({ type: "original-load-failure", requestId, message: ORIGINAL_LOAD_ERROR });
+    });
+  }, [jobId, originalStateKind, selectedId]);
+
+  const view = useMemo(() => reviewView(state), [state]);
 
   const beginEdit = useCallback((segmentId: number) => {
-    if (isSaving || showingOriginal || activeEdit !== null) return;
-    const segment = savedTranscript?.segments.find((item) => item.id === segmentId);
-    if (!segment) return;
-    setActiveEdit({ segmentId, text: stagedTexts[segmentId] ?? segment.text });
-  }, [activeEdit, isSaving, savedTranscript, showingOriginal, stagedTexts]);
+    dispatch({ type: "begin-edit", segmentId });
+  }, []);
 
   const updateActiveText = useCallback((text: string) => {
-    if (!activeEdit || isSaving) return;
-    setActiveEdit((current) => current ? { ...current, text } : current);
-    setSaveState({ kind: "idle" });
-  }, [activeEdit, isSaving]);
+    dispatch({ type: "update-active-text", text });
+  }, []);
 
   const stageActiveEdit = useCallback(() => {
-    if (!activeEdit || !savedTranscript || isSaving) return;
-    const savedText = savedTranscript.segments.find((segment) => segment.id === activeEdit.segmentId)?.text;
-    if (savedText === undefined) return;
-    setStagedTexts((current) => {
-      if (activeEdit.text === savedText) {
-        const next = { ...current };
-        delete next[activeEdit.segmentId];
-        return next;
-      }
-      return { ...current, [activeEdit.segmentId]: activeEdit.text };
-    });
-    setActiveEdit(null);
-    setSaveState({ kind: "idle" });
-  }, [activeEdit, isSaving, savedTranscript]);
+    dispatch({ type: "stage-active-edit" });
+  }, []);
 
   const cancelActiveEdit = useCallback(() => {
-    if (!activeEdit || isSaving) return;
-    setActiveEdit(null);
-  }, [activeEdit, isSaving]);
+    dispatch({ type: "cancel-active-edit" });
+  }, []);
 
   const discardChanges = useCallback(() => {
-    if (isSaving) return;
-    setStagedTexts({});
-    setActiveEdit(null);
-    setSaveState({ kind: "idle" });
-  }, [isSaving]);
+    dispatch({ type: "discard-changes" });
+  }, []);
 
-  const viewOriginal = useCallback(async () => {
-    if (!jobId || !savedTranscript) return;
-    if (originalState.kind === "loaded") {
-      setShowingOriginal(true);
+  const saveDraft = useCallback(() => {
+    dispatch({ type: "save-draft" });
+  }, []);
+
+  const selectRevision = useCallback((id: string) => {
+    if (selectedId === ORIGINAL_REVISION_ID && id === ORIGINAL_REVISION_ID && originalStateKind === "failed") {
+      dispatch({ type: "retry-original" });
       return;
     }
-    const identity = requestIdentity.current;
-    setOriginalState({ kind: "loading" });
-    try {
-      const original = await getOriginalTranscript(jobId);
-      if (requestIdentity.current !== identity) return;
-      setOriginalState({ kind: "loaded", transcript: original });
-      setShowingOriginal(true);
-    } catch {
-      if (requestIdentity.current === identity) {
-        setOriginalState({ kind: "failed", message: "โหลดบทถอดเสียงต้นฉบับไม่สำเร็จ กรุณาลองอีกครั้ง" });
-      }
-    }
-  }, [jobId, originalState.kind, savedTranscript]);
+    dispatch({ type: "select-revision", id });
+  }, [originalStateKind, selectedId]);
 
-  const viewLatest = useCallback(() => setShowingOriginal(false), []);
+  const resolveSwitch = useCallback((decision: SwitchDecision) => {
+    dispatch({ type: "resolve-switch", decision });
+  }, []);
 
-  const saveChanges = useCallback(async () => {
-    if (!jobId || !savedTranscript || !latestDraft || !hasStagedChanges || activeEdit || isSaving) return;
-    const identity = requestIdentity.current;
-    const submittedSegments: Pick<TranscriptSegment, "id" | "text">[] = savedTranscript.segments.map(({ id, text }) => ({
-      id,
-      text: stagedTexts[id] ?? text,
-    }));
-    setSaveState({ kind: "saving" });
+  const retryOriginal = useCallback(() => {
+    dispatch({ type: "retry-original" });
+  }, []);
+
+  const commitSelected = useCallback(async () => {
+    if (!jobId || !state || commitGate.current !== null || isReviewDirty(state) || state.commitState.kind === "saving") return;
+    const target = state.snapshots.find((snapshot) => snapshot.id === state.selectedId);
+    if (!target || target.id === state.latestId) return;
+
+    const requestId = ++commitRequestIdentity.current;
+    const instanceId = requestIdentity.current;
+    commitGate.current = requestId;
+    dispatch({ type: "commit-start", requestId });
+    const segments: Pick<TranscriptSegment, "id" | "text">[] = target.transcript.segments.map(({ id, text }) => ({ id, text }));
     try {
-      await saveTranscript(jobId, submittedSegments);
-      if (requestIdentity.current !== identity) return;
-      setSavedTranscript((current) => {
-        if (!current) return current;
-        const textById = new Map(submittedSegments.map(({ id, text }) => [id, text]));
-        const segments = current.segments.map((segment) => ({ ...segment, text: textById.get(segment.id) ?? segment.text }));
-        return { ...current, segments, text: segments.map(({ text }) => text.trim()).join("\n") };
-      });
-      setStagedTexts({});
-      setSaveState({ kind: "saved" });
+      await saveTranscript(jobId, segments);
+      if (requestIdentity.current === instanceId) dispatch({ type: "commit-success", requestId });
     } catch {
-      if (requestIdentity.current === identity) {
-        setSaveState({ kind: "failed", message: "บันทึกการแก้ไขไม่สำเร็จ กรุณาลองอีกครั้ง" });
-      }
+      if (requestIdentity.current === instanceId) dispatch({ type: "commit-failure", requestId, message: COMMIT_ERROR });
+    } finally {
+      if (commitGate.current === requestId) commitGate.current = null;
     }
-  }, [activeEdit, hasStagedChanges, isSaving, jobId, latestDraft, savedTranscript, stagedTexts]);
+  }, [jobId, state]);
 
   return {
-    transcript,
-    isOriginal: showingOriginal,
-    isDirty,
-    isSaving,
-    saveState,
-    originalState,
-    activeEdit,
-    stagedCount,
+    view,
     beginEdit,
     updateActiveText,
     stageActiveEdit,
     cancelActiveEdit,
     discardChanges,
-    viewOriginal,
-    viewLatest,
-    saveChanges,
+    saveDraft,
+    selectRevision,
+    resolveSwitch,
+    retryOriginal,
+    commitSelected,
   };
 }

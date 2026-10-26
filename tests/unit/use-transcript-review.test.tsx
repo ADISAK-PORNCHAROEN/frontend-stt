@@ -15,12 +15,20 @@ const JOB_ID: JobId = (() => {
   if (!isJobId(JOB_ID_VALUE)) throw new Error("Invalid test job ID");
   return JOB_ID_VALUE;
 })();
-const transcript: Transcript = {
+const latestTranscript: Transcript = {
   durationSeconds: 4,
-  text: "first\nsecond",
+  text: "latest first\nlatest second",
   segments: [
-    { id: 1, start: 0, end: 2, text: "first" },
-    { id: 2, start: 2, end: 4, text: "second" },
+    { id: 1, start: 0, end: 2, text: "latest first" },
+    { id: 2, start: 2, end: 4, text: "latest second" },
+  ],
+};
+const originalTranscript: Transcript = {
+  durationSeconds: 4,
+  text: "original first\noriginal second",
+  segments: [
+    { id: 1, start: 0, end: 2, text: "original first" },
+    { id: 2, start: 2, end: 4, text: "original second" },
   ],
 };
 
@@ -28,180 +36,161 @@ describe("useTranscriptReview", () => {
   beforeEach(() => {
     api.getOriginalTranscript.mockReset();
     api.saveTranscript.mockReset();
-  });
-
-  it("keeps an empty review inert when no transcript is available", async () => {
-    const { result } = renderHook(() => useTranscriptReview(null, null));
-    await waitFor(() => expect(result.current.isDirty).toBe(false));
-    act(() => result.current.beginEdit(1));
-    act(() => result.current.updateActiveText("ignored"));
-    act(() => result.current.stageActiveEdit());
-    await act(async () => {
-      await result.current.viewOriginal();
-      await result.current.saveChanges();
-    });
-    expect(result.current.transcript).toBeNull();
-    expect(result.current.originalState).toEqual({ kind: "unloaded" });
-    expect(api.getOriginalTranscript).not.toHaveBeenCalled();
-    expect(api.saveTranscript).not.toHaveBeenCalled();
-  });
-
-  it("stages one known segment, sends the complete ordered text-only save, and promotes success", async () => {
     api.saveTranscript.mockResolvedValue(undefined);
-    const { result } = renderHook(() => useTranscriptReview(JOB_ID, transcript));
-    act(() => result.current.beginEdit(900));
-    act(() => result.current.beginEdit(2));
-    act(() => result.current.updateActiveText(" second revised "));
-    expect(result.current.isDirty).toBe(true);
-    expect(result.current.activeEdit).toEqual({ segmentId: 2, text: " second revised " });
-    await act(async () => result.current.saveChanges());
-    expect(api.saveTranscript).not.toHaveBeenCalled();
-    act(() => result.current.stageActiveEdit());
-    expect(result.current.transcript?.segments.map(({ id, text }) => ({ id, text }))).toEqual([
-      { id: 1, text: "first" },
-      { id: 2, text: " second revised " },
-    ]);
-    await act(async () => result.current.saveChanges());
-    expect(api.saveTranscript).toHaveBeenCalledWith(JOB_ID, [
-      { id: 1, text: "first" },
-      { id: 2, text: " second revised " },
-    ]);
-    expect(result.current.isDirty).toBe(false);
-    expect(result.current.saveState).toEqual({ kind: "saved" });
-    expect(result.current.transcript?.text).toBe("first\nsecond revised");
+    api.getOriginalTranscript.mockResolvedValue(originalTranscript);
   });
 
-  it("cancels only the active row and preserves staged changes, including a prior stage for that row", () => {
-    const { result } = renderHook(() => useTranscriptReview(JOB_ID, transcript));
+  it("keeps original and every saved draft as separate immutable snapshots", async () => {
+    const { result } = renderHook(() => useTranscriptReview(JOB_ID, latestTranscript));
+    act(() => result.current.selectRevision("original"));
+    await waitFor(() => expect(result.current.view.originalState.kind).toBe("loaded"));
+    expect(result.current.view.transcript?.segments[0]?.text).toBe("original first");
+
     act(() => result.current.beginEdit(1));
-    act(() => result.current.updateActiveText("staged first"));
-    act(() => result.current.stageActiveEdit());
-    act(() => result.current.beginEdit(1));
-    act(() => result.current.updateActiveText("temporary first"));
+    act(() => result.current.updateActiveText("edited original"));
+    act(() => result.current.saveDraft());
+    const firstDraftId = result.current.view.revisions.find(({ kind }) => kind === "draft")?.id;
+    expect(firstDraftId).toBeDefined();
+    expect(result.current.view.transcript?.segments[0]?.text).toBe("edited original");
+
+    act(() => result.current.selectRevision("original"));
+    expect(result.current.view.transcript?.segments[0]?.text).toBe("original first");
+    act(() => result.current.selectRevision(result.current.view.latestId ?? ""));
+    expect(result.current.view.transcript?.segments[0]?.text).toBe("latest first");
+
+    act(() => result.current.selectRevision(firstDraftId ?? ""));
     act(() => result.current.beginEdit(2));
+    act(() => result.current.updateActiveText("second edit"));
+    act(() => result.current.saveDraft());
+    const draftIds = result.current.view.revisions.filter(({ kind }) => kind === "draft").map(({ id }) => id);
+    expect(draftIds).toHaveLength(2);
+    expect(draftIds[0]).not.toBe(draftIds[1]);
+
+    act(() => result.current.selectRevision(firstDraftId ?? ""));
+    expect(result.current.view.transcript?.segments.map(({ text }) => text)).toEqual(["edited original", "original second"]);
+  });
+
+  it("offers save, discard, or stay before changing away from unsaved text", async () => {
+    const { result } = renderHook(() => useTranscriptReview(JOB_ID, latestTranscript));
+    act(() => result.current.beginEdit(1));
+    act(() => result.current.updateActiveText("unsaved latest"));
+    act(() => result.current.selectRevision("original"));
+    expect(result.current.view.pendingSwitch?.id).toBe("original");
+    expect(result.current.view.currentId).toBe(result.current.view.latestId);
+
+    act(() => result.current.resolveSwitch("stay"));
+    expect(result.current.view.pendingSwitch).toBeNull();
+    expect(result.current.view.activeEdit?.text).toBe("unsaved latest");
+
+    act(() => result.current.selectRevision("original"));
+    act(() => result.current.resolveSwitch("save"));
+    await waitFor(() => expect(result.current.view.originalState.kind).toBe("loaded"));
+    expect(result.current.view.currentId).toBe("original");
+    const savedDraftId = result.current.view.revisions.find(({ kind }) => kind === "draft")?.id;
+    expect(savedDraftId).toBeDefined();
+    act(() => result.current.selectRevision(savedDraftId ?? ""));
+    expect(result.current.view.transcript?.segments[0]?.text).toBe("unsaved latest");
+
+    act(() => result.current.beginEdit(2));
+    act(() => result.current.updateActiveText("discard this"));
+    act(() => result.current.selectRevision(result.current.view.latestId ?? ""));
+    expect(result.current.view.pendingSwitch?.id).toBe(result.current.view.latestId);
+    act(() => result.current.resolveSwitch("discard"));
+    expect(result.current.view.currentId).toBe(result.current.view.latestId);
+    expect(result.current.view.isDirty).toBe(false);
+    act(() => result.current.selectRevision(savedDraftId ?? ""));
+    expect(result.current.view.transcript?.segments[1]?.text).toBe("latest second");
+  });
+
+  it("retains a selected draft after failed commit and promotes a copy only after success", async () => {
+    api.saveTranscript.mockRejectedValueOnce(new Error("fixture save failure")).mockResolvedValueOnce(undefined);
+    const { result } = renderHook(() => useTranscriptReview(JOB_ID, latestTranscript));
+    act(() => result.current.beginEdit(1));
+    act(() => result.current.updateActiveText("committable draft"));
+    act(() => result.current.saveDraft());
+    const draftId = result.current.view.currentId;
+    const originalLatestId = result.current.view.latestId;
+
+    await act(async () => result.current.commitSelected());
+    expect(result.current.view.commitState.kind).toBe("failed");
+    expect(result.current.view.currentId).toBe(draftId);
+    expect(result.current.view.transcript?.segments[0]?.text).toBe("committable draft");
+    expect(result.current.view.revisions.some(({ id }) => id === draftId)).toBe(true);
+    expect(result.current.view.latestId).toBe(originalLatestId);
+    act(() => result.current.beginEdit(2));
+    act(() => result.current.updateActiveText("temporary text"));
     act(() => result.current.cancelActiveEdit());
+    expect(result.current.view.commitState.kind).toBe("failed");
+    expect(result.current.view.transcript?.segments[1]?.text).toBe("latest second");
 
-    expect(result.current.activeEdit).toBeNull();
-    expect(result.current.transcript?.segments.map(({ id, text }) => ({ id, text }))).toEqual([
-      { id: 1, text: "staged first" },
-      { id: 2, text: "second" },
+    await act(async () => result.current.commitSelected());
+    expect(result.current.view.commitState.kind).toBe("saved");
+    expect(result.current.view.latestId).not.toBe(originalLatestId);
+    expect(result.current.view.currentId).toBe(result.current.view.latestId);
+    expect(result.current.view.transcript?.segments[0]?.text).toBe("committable draft");
+    expect(api.saveTranscript).toHaveBeenNthCalledWith(1, JOB_ID, [
+      { id: 1, text: "committable draft" },
+      { id: 2, text: "latest second" },
     ]);
-    expect(result.current.isDirty).toBe(true);
-
-    act(() => result.current.beginEdit(2));
-    act(() => result.current.updateActiveText("staged second"));
-    act(() => result.current.stageActiveEdit());
-    expect(result.current.transcript?.segments.map(({ id, text }) => ({ id, text }))).toEqual([
-      { id: 1, text: "staged first" },
-      { id: 2, text: "staged second" },
+    expect(api.saveTranscript).toHaveBeenNthCalledWith(2, JOB_ID, [
+      { id: 1, text: "committable draft" },
+      { id: 2, text: "latest second" },
     ]);
+
+    act(() => result.current.selectRevision("original"));
+    await waitFor(() => expect(result.current.view.transcript?.segments[0]?.text).toBe("original first"));
   });
 
-  it("discards the active edit and every staged draft without changing saved transcript", () => {
-    const { result } = renderHook(() => useTranscriptReview(JOB_ID, transcript));
-    act(() => result.current.beginEdit(1));
-    act(() => result.current.updateActiveText("staged first"));
-    act(() => result.current.stageActiveEdit());
-    act(() => result.current.beginEdit(2));
-    act(() => result.current.updateActiveText("temporary second"));
+  it("does not show the latest transcript when the original is selected but still loading or failed", async () => {
+    api.getOriginalTranscript.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce(originalTranscript);
+    const { result } = renderHook(() => useTranscriptReview(JOB_ID, latestTranscript));
+    act(() => result.current.selectRevision("original"));
+    expect(result.current.view.transcript).toBeNull();
+    await waitFor(() => expect(result.current.view.originalState.kind).toBe("failed"));
+    expect(result.current.view.transcript).toBeNull();
 
-    expect(result.current.stagedCount).toBe(1);
-    expect(result.current.isDirty).toBe(true);
-    act(() => result.current.discardChanges());
-
-    expect(result.current.activeEdit).toBeNull();
-    expect(result.current.stagedCount).toBe(0);
-    expect(result.current.isDirty).toBe(false);
-    expect(result.current.transcript?.segments.map(({ id, text }) => ({ id, text }))).toEqual([
-      { id: 1, text: "first" },
-      { id: 2, text: "second" },
-    ]);
-  });
-
-  it("clears an active draft when it is staged back to the saved text", () => {
-    const { result } = renderHook(() => useTranscriptReview(JOB_ID, transcript));
-    act(() => result.current.beginEdit(1));
-    act(() => result.current.updateActiveText("temporary"));
-    expect(result.current.isDirty).toBe(true);
-    act(() => result.current.updateActiveText("first"));
-    act(() => result.current.stageActiveEdit());
-    expect(result.current.isDirty).toBe(false);
-    expect(result.current.transcript?.segments[0]?.text).toBe("first");
-  });
-
-  it("retains a failed draft and lets the user retry successfully", async () => {
-    api.saveTranscript.mockRejectedValueOnce(new Error("service unavailable"));
-    api.saveTranscript.mockResolvedValueOnce(undefined);
-    const { result } = renderHook(() => useTranscriptReview(JOB_ID, transcript));
-    act(() => result.current.beginEdit(1));
-    act(() => result.current.updateActiveText("corrected first"));
-    act(() => result.current.stageActiveEdit());
-    await act(async () => result.current.saveChanges());
-    expect(result.current.saveState).toEqual({ kind: "failed", message: "บันทึกการแก้ไขไม่สำเร็จ กรุณาลองอีกครั้ง" });
-    expect(result.current.isDirty).toBe(true);
-    expect(result.current.transcript?.segments[0]?.text).toBe("corrected first");
-    await act(async () => result.current.saveChanges());
-    expect(result.current.saveState).toEqual({ kind: "saved" });
-    expect(result.current.isDirty).toBe(false);
-    expect(api.saveTranscript).toHaveBeenCalledTimes(2);
-  });
-
-  it("prevents a duplicate save while a request is pending", async () => {
-    let completeSave: () => void = () => undefined;
-    api.saveTranscript.mockReturnValue(new Promise<void>((resolve) => { completeSave = resolve; }));
-    const { result } = renderHook(() => useTranscriptReview(JOB_ID, transcript));
-    act(() => result.current.beginEdit(1));
-    act(() => result.current.updateActiveText("corrected"));
-    act(() => result.current.stageActiveEdit());
-    let firstSave: Promise<void> = Promise.resolve();
-    await act(async () => { firstSave = result.current.saveChanges(); });
-    expect(result.current.isSaving).toBe(true);
-    await act(async () => result.current.saveChanges());
-    expect(api.saveTranscript).toHaveBeenCalledOnce();
-    await act(async () => {
-      completeSave();
-      await firstSave;
-    });
-    expect(result.current.saveState).toEqual({ kind: "saved" });
-  });
-
-  it("loads the immutable original once and switches between original and latest", async () => {
-    api.getOriginalTranscript.mockResolvedValue({ ...transcript, text: "original copy" });
-    const { result } = renderHook(() => useTranscriptReview(JOB_ID, transcript));
-    act(() => result.current.beginEdit(1));
-    act(() => result.current.updateActiveText("edited latest"));
-    act(() => result.current.stageActiveEdit());
-    await act(async () => result.current.viewOriginal());
-    expect(result.current.isOriginal).toBe(true);
-    expect(result.current.transcript?.text).toBe("original copy");
-    expect(result.current.originalState.kind).toBe("loaded");
-    act(() => result.current.viewLatest());
-    expect(result.current.transcript?.segments[0]?.text).toBe("edited latest");
-    await act(async () => result.current.viewOriginal());
-    expect(api.getOriginalTranscript).toHaveBeenCalledOnce();
-  });
-
-  it("reports original-load failure and supports a later retry", async () => {
-    api.getOriginalTranscript.mockRejectedValueOnce(new Error("offline"));
-    api.getOriginalTranscript.mockResolvedValueOnce({ ...transcript, text: "original" });
-    const { result } = renderHook(() => useTranscriptReview(JOB_ID, transcript));
-    await act(async () => result.current.viewOriginal());
-    expect(result.current.originalState).toEqual({ kind: "failed", message: "โหลดบทถอดเสียงต้นฉบับไม่สำเร็จ กรุณาลองอีกครั้ง" });
-    await act(async () => result.current.viewOriginal());
-    expect(result.current.originalState.kind).toBe("loaded");
-    expect(result.current.isOriginal).toBe(true);
+    act(() => result.current.selectRevision("original"));
+    await waitFor(() => expect(result.current.view.originalState.kind).toBe("loaded"));
+    expect(result.current.view.transcript?.segments[0]?.text).toBe("original first");
     expect(api.getOriginalTranscript).toHaveBeenCalledTimes(2);
   });
 
-  it("ignores an original response after the review unmounts", async () => {
-    let completeLoad: (value: Transcript) => void = () => undefined;
-    api.getOriginalTranscript.mockReturnValue(new Promise<Transcript>((resolve) => { completeLoad = resolve; }));
-    const { result, unmount } = renderHook(() => useTranscriptReview(JOB_ID, transcript));
-    let load: Promise<void> = Promise.resolve();
-    await act(async () => { load = result.current.viewOriginal(); });
-    unmount();
-    completeLoad({ ...transcript, text: "late response" });
-    await load;
-    expect(api.getOriginalTranscript).toHaveBeenCalledOnce();
+  it("keeps the review view empty until a completed transcript and job are available", async () => {
+    const { result } = renderHook(() => useTranscriptReview(null, null));
+    expect(result.current.view.transcript).toBeNull();
+    expect(result.current.view.revisions).toEqual([]);
+    act(() => result.current.beginEdit(1));
+    act(() => result.current.updateActiveText("ignored"));
+    act(() => result.current.stageActiveEdit());
+    act(() => result.current.cancelActiveEdit());
+    act(() => result.current.discardChanges());
+    act(() => result.current.saveDraft());
+    act(() => result.current.retryOriginal());
+    act(() => result.current.resolveSwitch("stay"));
+    await act(async () => result.current.commitSelected());
+    expect(api.saveTranscript).not.toHaveBeenCalled();
+    expect(api.getOriginalTranscript).not.toHaveBeenCalled();
+  });
+
+  it("blocks duplicate commits while the same request is pending", async () => {
+    let completeCommit: () => void = () => undefined;
+    api.saveTranscript.mockReturnValue(new Promise<void>((resolve) => { completeCommit = resolve; }));
+    const { result } = renderHook(() => useTranscriptReview(JOB_ID, latestTranscript));
+    act(() => result.current.beginEdit(1));
+    act(() => result.current.updateActiveText("pending commit"));
+    act(() => result.current.saveDraft());
+    let commit: Promise<void> = Promise.resolve();
+    act(() => {
+      commit = result.current.commitSelected();
+      void result.current.commitSelected();
+    });
+    expect(result.current.view.isSaving).toBe(true);
+    expect(api.saveTranscript).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      completeCommit();
+      await commit;
+    });
+    expect(result.current.view.commitState.kind).toBe("saved");
   });
 });
