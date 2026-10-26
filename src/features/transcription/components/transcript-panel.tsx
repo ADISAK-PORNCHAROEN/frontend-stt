@@ -364,7 +364,7 @@ export function TranscriptPanel({
                 </Select>
               </label>
               <pre
-                className="m-0 max-h-[56dvh] min-w-0 overflow-auto overscroll-contain rounded-lg border border-line bg-surface-soft p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words text-ink"
+                className="m-0 max-h-[44dvh] min-w-0 overflow-auto overscroll-contain rounded-lg border border-line bg-surface-soft p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words text-ink sm:max-h-[56dvh]"
                 aria-label={`เนื้อหาตัวอย่าง ${exportFormat.toUpperCase()}`}
                 data-testid="transcript-export-preview"
               >{serializeTranscript(selectedSnapshotTranscript, exportFormat)}</pre>

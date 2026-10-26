@@ -812,6 +812,7 @@ test("#23 previews and downloads only the selected revision and format on deskto
     expect(latestSrt.download.suggestedFilename()).toBe("transcript-latest-0.srt");
     expect(latestSrt.fileText).toBe(latestSrt.preview);
     expect(latestSrt.preview).toContain("00:00:00,000 --> 00:00:02,000");
+    expect(await dialog.evaluate((element) => element.scrollTop)).toBe(0);
     await page.screenshot({ path: testInfo.outputPath(`issue-23-latest-preview-${viewport.name}.png`), fullPage: true });
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
